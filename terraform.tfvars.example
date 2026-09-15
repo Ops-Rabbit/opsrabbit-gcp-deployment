@@ -1,0 +1,46 @@
+project_id  = "my-gcp-project"
+region      = "us-central1"
+name_prefix = "opsrabbit"
+
+# ---- Networking ----
+# A VPC is always created/used now (Filestore has no public-IP mode).
+create_vpc  = true
+subnet_cidr = "10.10.0.0/20"
+
+network_mode = "public"
+
+authorized_networks = [
+  { name = "terraform-runner", cidr = "203.0.113.10/32" },
+]
+
+allow_unauthenticated = true
+
+# ---- Images ----
+backend_image = "us-central1-docker.pkg.dev/my-gcp-project/opsrabbit/backend@sha256:REPLACE_ME"
+web_image     = "us-central1-docker.pkg.dev/my-gcp-project/opsrabbit/web@sha256:REPLACE_ME"
+
+# ---- Cloud SQL ----
+postgresql_instance_name       = "opsrabbit-pg"
+postgresql_tier                = "db-custom-2-8192"
+postgresql_disk_size_gb        = 50
+postgresql_database_name       = "opsrabbit"
+postgresql_administrator_login = "opsrabbit_admin"
+
+# ---- Filestore ----
+filestore_tier         = "BASIC_HDD"
+filestore_capacity_gb  = 1024
+filestore_share_name   = "opsrabbit"
+
+# Determine with: docker run --rm --entrypoint sh <backend_image> -c "id -u; id -g"
+backend_uid = 1000
+backend_gid = 1000
+
+# ---- App origin ----
+application_origin = "https://opsrabbit.example.com"
+
+# Keep false for the bootstrap apply; flip to true once images are imported
+# AND NFS write access has been verified (see README).
+application_enabled = false
+
+# postgresql_administrator_password, better_auth_secret, and
+# opsrabbit_encryption_key are NOT set here -- export as TF_VAR_* env vars.
