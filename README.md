@@ -10,7 +10,8 @@ Terraform for deploying OpsRabbit on Google Cloud.
 | Pull identity | Service account + `roles/artifactregistry.reader` |
 | Persistent storage | Filestore instance, four subdirectories mounted into Cloud Run as separate NFS volumes (`.opsrabbit`, `git`, `.agent-browser`, `.codex` under `/home/opsbot`) |
 | Database | Cloud SQL for PostgreSQL 16, with the `vector` extension |
-| Compute | Cloud Run v2 service running `web` (ingress) + `backend` (sidecar) containers |
+| Compute | Cloud Run v2 service running `web` (ingress), `backend`, and a private-IP Cloud SQL Auth Proxy |
+| File backups | Daily Workflows + Cloud Scheduler backups; 14-day retention |
 | Secrets | Secret Manager (DB URL, `BETTER_AUTH_SECRET`, `OPSRABBIT_NODE_ENCRYPTION_KEY`) |
 | Networking | Dedicated VPC + subnet, Direct VPC egress from Cloud Run to Filestore |
 
@@ -33,9 +34,10 @@ Terraform for deploying OpsRabbit on Google Cloud.
 ## Prerequisites
 
 - A GCP project with billing enabled
-- `roles/editor` or equivalent for the identity running Terraform
+- A deployment identity able to enable APIs, create resources/service accounts/custom roles, manage project and secret IAM, and act as the runtime, workflow, and scheduler service accounts (`roles/editor` alone is insufficient)
 - `gcloud` CLI authenticated to the target project
 - Terraform `>= 1.15`, `google` provider `>= 6.15`
+- Python 3.10+ for offline workflow tests
 - An approved OpsRabbit release manifest and read access to OpsRabbit's ECR repositories
 - Encrypted, access-controlled GCS bucket for Terraform state
 
@@ -95,7 +97,7 @@ then:
 ```bash
 gcloud run jobs execute "$(terraform output -raw filestore_init_job_name)" \
   --project "$(terraform output -raw project_id)" \
-  --region "$REGION" \
+  --region "$(terraform output -raw region)" \
   --wait
 ```
 
@@ -117,7 +119,18 @@ docker push "${AR_REPO}/web:<release>"
 Set `backend_image` / `web_image` in `terraform.tfvars` to the resulting
 `@sha256:...` digests.
 
-### 6. Deploy
+### 6. Configure the origin and deploy
+
+Set `application_origin` to the HTTPS origin clients will actually use, without
+an API path or trailing slash. It is required when enabling the service. For a
+custom domain, provision DNS and HTTPS routing separately; this module does not
+create domain mappings or a load balancer. To use Cloud Run's deterministic URL,
+obtain the project number with `gcloud projects describe PROJECT_ID
+--format='value(projectNumber)'` and use
+`https://NAME_PREFIX-app-PROJECT_NUMBER.REGION.run.app`.
+
+Application image references must be Artifact Registry SHA-256 digests when
+enabling the service; bootstrap placeholders are allowed only while disabled.
 
 ```bash
 # terraform.tfvars
@@ -159,3 +172,91 @@ during a routine image upgrade.
 Cloud SQL, the database, and Filestore have `prevent_destroy` /
 `deletion_protection = true`. Intentional removal requires a reviewed
 change that removes those guards after backups and approval.
+
+## Runtime and rotation
+
+The backend connects to localhost:5432. A pinned Cloud SQL Auth Proxy sidecar
+uses `--private-ip` over Direct VPC egress and encrypts/authenticates the remote
+connection. `sslmode=disable` applies only to the local connection to the proxy.
+All secret environment variables reference Terraform-managed numeric versions,
+so changes produce a new revision. Replaced versions are retained for rollback;
+disable/destroy obsolete versions after the rollout and rollback window.
+Runtime secret access is limited to the three
+application secrets.
+
+A password rotation can still interrupt old instances before the new revision
+is ready: schedule a maintenance window, stop new work, rotate and apply, then
+verify database access and login. Do not rotate the encryption key without an
+application-supported data migration; pinning versions does not re-encrypt data.
+
+One warm instance with continuously allocated CPU supports background work and
+incurs idle compute charges. Request concurrency and revision maximum instances
+are set to one. These are not distributed locks: revisions can overlap during a
+rollout, and one request can launch multiple background jobs. Cloud Run NFS has
+no locking support. Until the application proves safe concurrency, quiesce jobs
+before upgrades and test git/browser/session persistence in staging.
+
+## Filestore backup and restore
+
+Bootstrap creates a daily 02:00 UTC backup workflow. After the new backup finishes,
+it deletes only backups older than `filestore_backup_retention_days` (default 14)
+that carry its ownership label and match this instance and share. Failed backup
+creation never triggers pruning. Backups incur storage charges and survive
+removal of the schedule. Manual backups without the ownership label are retained.
+These file backups and Cloud SQL PITR are separate recovery points; coordinated
+application recovery requires quiescing writes and selecting compatible points.
+
+Run an initial backup and inspect its execution before production use:
+
+```bash
+gcloud workflows run "$(terraform output -raw filestore_backup_workflow)" \
+  --project "$(terraform output -raw project_id)" \
+  --location "$(terraform output -raw region)"
+gcloud filestore backups list \
+  --project "$(terraform output -raw project_id)" \
+  --region "$(terraform output -raw region)"
+```
+
+Check Workflows execution failures as well as Cloud Scheduler delivery: a
+successful scheduler request only means the workflow was started. Operations
+that exceed the workflow's one-hour wait fail without pruning; inspect their
+Filestore operation status before retrying. Configure production alert routing
+for failed executions in your monitoring system.
+
+For a restore drill, select a READY backup and restore it to a **new** Basic-tier
+instance using `gcloud filestore instances create RESTORE_INSTANCE
+--project=PROJECT_ID --zone=ZONE --tier=BASIC_HDD
+--file-share=name=SHARE,capacity=1TB,source-backup=BACKUP_NAME,source-backup-region=BACKUP_REGION
+--network=name=VPC,connect-mode=PRIVATE_SERVICE_ACCESS` (use the source's actual
+tier, sufficient capacity, share, and network). Mount it from an isolated client
+and verify file contents and ownership before planning any production cutover.
+Do not overwrite the live share for a drill. Follow [Google's restore
+instructions](https://cloud.google.com/filestore/docs/restore-data)
+for in-place disaster recovery, with application writes stopped and a fresh
+backup of the current state. Record the backup ID, restore duration, and checks.
+
+## Validation before deployment
+
+`make check` runs formatting, schema validation, Google-specific lint rules,
+security checks, mocked Terraform regression tests, and offline Python workflow
+and dependency tests. Test initialization disables the remote backend. It does
+not deploy or require GCP credentials. Provider/plugin installation may download
+public binaries. See [tests/README.md](tests/README.md) for test boundaries.
+The mock tests do not validate image entrypoints or call Google APIs.
+
+Before promotion, use a disposable staging project to verify:
+
+1. Bootstrap with APIs initially disabled; execute the Filestore init job.
+2. Both release images start, nginx proxies API calls, and migrations create
+   the expected database schema and vector extension.
+3. Login and redirects work at the configured HTTPS origin.
+4. A background job progresses after its HTTP request finishes.
+5. Data, git workspaces, browser sessions, and credentials survive an instance
+   restart; concurrent work and revision replacement do not corrupt the share.
+6. Secret rotation creates a new revision with the intended versions.
+7. A backup completes, expired owned backups are pruned, unrelated backups are
+   preserved, and an isolated restore recovers the expected files.
+
+Basic SSD requires at least 2560 GiB; Basic HDD requires 1024 GiB. The supported
+Basic tiers cannot use CMEK, so non-null `kms_key_name` values are rejected.
+Cloud SQL storage grows automatically; monitor capacity and cost.

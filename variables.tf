@@ -74,11 +74,21 @@ variable "allow_unauthenticated" {
 variable "backend_image" {
   description = "Full Artifact Registry image reference, using an immutable digest."
   type        = string
+
+  validation {
+    condition     = !var.application_enabled || can(regex("^[a-z0-9-]+-docker[.]pkg[.]dev/[^/]+/[^/]+/.+@sha256:[0-9a-f]{64}$", var.backend_image))
+    error_message = "backend_image must be an Artifact Registry image pinned to a SHA-256 digest when application_enabled is true."
+  }
 }
 
 variable "web_image" {
   description = "Full Artifact Registry image reference, using an immutable digest."
   type        = string
+
+  validation {
+    condition     = !var.application_enabled || can(regex("^[a-z0-9-]+-docker[.]pkg[.]dev/[^/]+/[^/]+/.+@sha256:[0-9a-f]{64}$", var.web_image))
+    error_message = "web_image must be an Artifact Registry image pinned to a SHA-256 digest when application_enabled is true."
+  }
 }
 
 variable "backend_cpu" {
@@ -169,13 +179,13 @@ variable "filestore_tier" {
 }
 
 variable "filestore_capacity_gb" {
-  description = "Basic tier minimum is 1024 GB regardless of how much you actually need."
+  description = "Capacity in GiB: Basic HDD requires 1024; Basic SSD requires 2560."
   type        = number
   default     = 1024
 
   validation {
-    condition     = var.filestore_capacity_gb >= 1024
-    error_message = "Basic-tier Filestore requires at least 1024 GB."
+    condition     = floor(var.filestore_capacity_gb) == var.filestore_capacity_gb && var.filestore_capacity_gb >= (var.filestore_tier == "BASIC_SSD" ? 2560 : 1024)
+    error_message = "Filestore requires whole GiB, at least 1024 for BASIC_HDD or 2560 for BASIC_SSD."
   }
 }
 
@@ -199,9 +209,14 @@ variable "opsrabbit_encryption_key" {
 }
 
 variable "application_origin" {
-  description = "Public HTTPS origin, e.g. \"https://opsrabbit.example.com\". If null, the Cloud Run-assigned URL is used."
+  description = "HTTPS origin used by clients; required when application_enabled is true. Configure DNS/routing separately for a custom domain."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.application_origin == null ? !var.application_enabled : can(regex("^https://[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]+)?$", var.application_origin))
+    error_message = "Set application_origin to a real HTTPS origin (no path or trailing slash) before enabling the application."
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -209,20 +224,14 @@ variable "application_origin" {
 # ---------------------------------------------------------------------------
 
 variable "kms_key_name" {
-  description = <<-EOT
-    Optional Cloud KMS key (format:
-    projects/P/locations/L/keyRings/R/cryptoKeys/K) for customer-managed
-    encryption at rest on Cloud SQL, Filestore, and Artifact Registry.
-    Leave null (default) to use Google-managed encryption, which is the
-    default for every GCP storage service here and sufficient for most
-    deployments. Only set this if a customer's compliance requirements
-    specifically mandate CMEK. The key must already exist, and the
-    relevant Google service agent needs
-    roles/cloudkms.cryptoKeyEncrypterDecrypter on it before this is set --
-    see SECURITY.md for the exact service agents and setup order.
-  EOT
+  description = "Reserved for a future CMEK-capable storage tier. Basic Filestore does not support CMEK; this deployment currently requires null."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.kms_key_name == null
+    error_message = "CMEK is not supported by the allowed Basic Filestore tiers. Leave kms_key_name null; a CMEK deployment requires a storage-tier redesign."
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -233,4 +242,14 @@ variable "application_enabled" {
   description = "Keep false for the bootstrap apply (registry, database, Filestore, VPC only). Set true once images are imported and NFS write access is verified."
   type        = bool
   default     = false
+}
+
+variable "filestore_backup_retention_days" {
+  description = "Daily backups retained for this many days; pruning occurs only after a successful new backup."
+  type        = number
+  default     = 14
+  validation {
+    condition     = var.filestore_backup_retention_days >= 1 && floor(var.filestore_backup_retention_days) == var.filestore_backup_retention_days
+    error_message = "Backup retention must be a positive whole number of days."
+  }
 }

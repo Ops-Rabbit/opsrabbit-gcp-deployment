@@ -13,6 +13,8 @@ resource "google_compute_network" "opsrabbit" {
   project                 = var.project_id
   name                    = "${var.name_prefix}-vpc"
   auto_create_subnetworks = false
+
+  depends_on = [google_project_service.required["compute.googleapis.com"]]
 }
 
 resource "google_compute_subnetwork" "opsrabbit" {
@@ -52,8 +54,7 @@ locals {
 }
 
 # ---------------------------------------------------------------------------
-# Private services access -- used by Filestore always, and by Cloud SQL only
-# when network_mode = "private".
+# Private services access -- used by both Filestore and Cloud SQL.
 # ---------------------------------------------------------------------------
 
 resource "google_compute_global_address" "private_services_range" {
@@ -63,6 +64,8 @@ resource "google_compute_global_address" "private_services_range" {
   address_type  = "INTERNAL"
   prefix_length = 20
   network       = local.vpc_self_link
+
+  depends_on = [google_project_service.required["compute.googleapis.com"]]
 }
 
 resource "google_service_networking_connection" "private_services" {

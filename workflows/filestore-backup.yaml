@@ -1,0 +1,107 @@
+main:
+  steps:
+    - initialize:
+        assign:
+          - parent: ${sys.get_env("BACKUP_PARENT")}
+          - source: ${sys.get_env("SOURCE_INSTANCE")}
+          - share: ${sys.get_env("SOURCE_SHARE")}
+          - cutoff: ${sys.now() - int(sys.get_env("RETENTION_DAYS")) * 86400}
+          - backupId: ${"scheduled-" + string(int(sys.now()))}
+          - pageToken: ""
+          - backups: []
+    - create:
+        call: http.post
+        args:
+          url: ${"https://file.googleapis.com/v1/" + parent + "/backups"}
+          auth:
+            type: OAuth2
+          query:
+            backupId: ${backupId}
+          body:
+            sourceInstance: ${source}
+            sourceFileShare: ${share}
+            labels:
+              managed-by: opsrabbit-backup
+        result: created
+    - waitForBackup:
+        call: waitForOperation
+        args:
+          operation: ${created.body.name}
+    # Do not prune anything until the new backup completed successfully.
+    - listPage:
+        call: http.get
+        args:
+          url: ${"https://file.googleapis.com/v1/" + parent + "/backups"}
+          auth:
+            type: OAuth2
+          query:
+            pageSize: 1000
+            pageToken: ${pageToken}
+        result: page
+    - collect:
+        for:
+          value: backup
+          in: ${default(map.get(page.body, "backups"), [])}
+          steps:
+            - append:
+                assign:
+                  - backups: ${list.concat(backups, backup)}
+    - pageToken:
+        assign:
+          - pageToken: ${default(map.get(page.body, "nextPageToken"), "")}
+    - nextPage:
+        switch:
+          - condition: ${pageToken != ""}
+            next: listPage
+    - prune:
+        for:
+          value: backup
+          in: ${backups}
+          steps:
+            - ownedAndExpired:
+                switch:
+                  - condition: ${map.get(backup, ["labels", "managed-by"]) == "opsrabbit-backup" and backup.sourceInstance == source and backup.sourceFileShare == share and backup.state == "READY" and time.parse(backup.createTime) < cutoff}
+                    steps:
+                      - delete:
+                          call: http.delete
+                          args:
+                            url: ${"https://file.googleapis.com/v1/" + backup.name}
+                            auth:
+                              type: OAuth2
+                          result: deleted
+                      - waitForDelete:
+                          call: waitForOperation
+                          args:
+                            operation: ${deleted.body.name}
+    - finish:
+        return: ${parent + "/backups/" + backupId}
+
+waitForOperation:
+  params: [operation]
+  steps:
+    - initialize:
+        assign:
+          - attempts: 0
+    - poll:
+        call: http.get
+        args:
+          url: ${"https://file.googleapis.com/v1/" + operation}
+          auth:
+            type: OAuth2
+        result: status
+    - check:
+        switch:
+          - condition: ${map.get(status.body, "error") != null}
+            raise: ${status.body.error}
+          - condition: ${default(map.get(status.body, "done"), false)}
+            return: ${status.body}
+          - condition: ${attempts >= 120}
+            raise: "Filestore operation did not finish within one hour; inspect the operation before retrying."
+    - pause:
+        call: sys.sleep
+        args:
+          seconds: 30
+    - increment:
+        assign:
+          - attempts: ${attempts + 1}
+        next: poll

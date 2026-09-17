@@ -37,3 +37,11 @@ output "opsrabbit_url" {
 output "cloud_run_service_name" {
   value = var.application_enabled ? google_cloud_run_v2_service.opsrabbit[0].name : null
 }
+
+output "filestore_backup_workflow" {
+  value = google_workflows_workflow.backup.name
+}
+
+output "region" {
+  value = var.region
+}

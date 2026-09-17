@@ -12,6 +12,10 @@ resource "google_project_service" "required" {
     "secretmanager.googleapis.com",
     "servicenetworking.googleapis.com",
     "vpcaccess.googleapis.com",
+    "iam.googleapis.com",
+    "workflows.googleapis.com",
+    "workflowexecutions.googleapis.com",
+    "cloudscheduler.googleapis.com",
   ])
 
   project            = var.project_id
@@ -42,6 +46,8 @@ resource "google_service_account" "run_sa" {
   project      = var.project_id
   account_id   = "${var.name_prefix}-run"
   display_name = "OpsRabbit Cloud Run runtime identity"
+
+  depends_on = [google_project_service.required]
 }
 
 resource "google_artifact_registry_repository_iam_member" "run_sa_pull" {
@@ -57,10 +63,16 @@ resource "google_project_iam_member" "run_sa_cloudsql_client" {
   member  = "serviceAccount:${google_service_account.run_sa.email}"
 }
 
-resource "google_project_iam_member" "run_sa_secret_accessor" {
-  project = var.project_id
-  role    = "roles/secretmanager.secretAccessor"
-  member  = "serviceAccount:${google_service_account.run_sa.email}"
+resource "google_secret_manager_secret_iam_member" "run_sa_secret_accessor" {
+  for_each = {
+    database_url = google_secret_manager_secret.database_url.secret_id
+    better_auth  = google_secret_manager_secret.better_auth_secret.secret_id
+    encryption   = google_secret_manager_secret.encryption_key.secret_id
+  }
+  project   = var.project_id
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.run_sa.email}"
 }
 
 # ---------------------------------------------------------------------------
@@ -113,7 +125,7 @@ resource "google_sql_database_instance" "opsrabbit" {
   settings {
     tier              = var.postgresql_tier
     disk_size         = var.postgresql_disk_size_gb
-    disk_autoresize   = false
+    disk_autoresize   = true
     availability_type = "ZONAL"
 
     backup_configuration {

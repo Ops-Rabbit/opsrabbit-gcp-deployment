@@ -1,4 +1,4 @@
-.PHONY: fmt validate lint security test init plan bootstrap deploy clean
+.PHONY: fmt fmt-check validate lint security test init init-check check plan apply clean
 
 fmt:
 	terraform fmt -recursive
@@ -9,7 +9,10 @@ fmt-check:
 init:
 	terraform init
 
-validate: init
+init-check:
+	terraform init -backend=false
+
+validate: init-check
 	terraform validate
 
 lint:
@@ -19,8 +22,9 @@ lint:
 security:
 	tfsec .
 
-test: init
+test: init-check
 	terraform test
+	python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 check: fmt-check validate lint security test
 

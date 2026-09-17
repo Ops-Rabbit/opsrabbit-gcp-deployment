@@ -3,20 +3,15 @@ locals {
     app = var.name_prefix
   })
 
-  application_origin = coalesce(
-    var.application_origin,
-    "https://placeholder-until-first-apply.run.app"
-  )
-
-  # Falls back to nginx's "_" catch-all only if no real domain is set yet.
-  web_server_name = var.application_origin != null ? trimprefix(var.application_origin, "https://") : "_"
+  # Deployment requires an explicit origin; bootstrap does not create the service.
+  application_origin = var.application_origin
+  web_server_name    = var.application_origin == null ? "_" : trimprefix(var.application_origin, "https://")
 
   postgresql_connection_name = google_sql_database_instance.opsrabbit.connection_name
 
-  # Cloud SQL is still reached via the Cloud Run Unix-socket volume type
-  # (independent of the Filestore/Direct-VPC-egress networking below) --
-  # this doesn't require the VPC at all, Google manages that path itself.
-  postgresql_database_url = "postgresql://${var.postgresql_administrator_login}:${var.postgresql_administrator_password}@/${var.postgresql_database_name}?host=/cloudsql/${local.postgresql_connection_name}"
+  # Only the local hop is plaintext. The private-IP Auth Proxy authenticates
+  # the server and encrypts the connection to Cloud SQL.
+  postgresql_database_url = "postgresql://${replace(urlencode(var.postgresql_administrator_login), "+", "%20")}:${replace(urlencode(var.postgresql_administrator_password), "+", "%20")}@127.0.0.1:5432/${replace(urlencode(var.postgresql_database_name), "+", "%20")}?sslmode=disable"
 
   filestore_ip_address = google_filestore_instance.opsrabbit.networks[0].ip_addresses[0]
 }

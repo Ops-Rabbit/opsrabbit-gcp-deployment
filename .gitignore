@@ -39,3 +39,6 @@ backend.tf
 .vscode/
 .idea/
 *.swp
+# Python offline test bytecode
+__pycache__/
+*.pyc

@@ -62,6 +62,9 @@ jobs:
       - name: terraform test
         run: terraform test
 
+      - name: Offline workflow and dependency tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+
   security-scan:
     name: tfsec
     runs-on: ubuntu-latest

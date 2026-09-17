@@ -8,7 +8,16 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
   ingress             = var.network_mode == "private" ? "INGRESS_TRAFFIC_INTERNAL_ONLY" : "INGRESS_TRAFFIC_ALL"
 
   template {
-    service_account = google_service_account.run_sa.email
+    service_account                  = google_service_account.run_sa.email
+    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
+    max_instance_request_concurrency = 1
+
+    # Keep background work running and limit concurrent writers to the share.
+    # Revision rollouts can still overlap; see the staging checklist in README.
+    scaling {
+      min_instance_count = 1
+      max_instance_count = 1
+    }
 
     # Direct VPC egress -- required to reach Filestore's private IP. No VPC
     # Connector needed. Default egress ("PRIVATE_RANGES_ONLY") still lets the
@@ -31,6 +40,7 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
       ]
 
       resources {
+        cpu_idle = false
         limits = {
           cpu    = var.web_cpu
           memory = var.web_memory
@@ -83,8 +93,9 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
     }
 
     containers {
-      name  = "backend"
-      image = var.backend_image
+      name       = "backend"
+      image      = var.backend_image
+      depends_on = ["cloudsql-proxy"]
 
       # Runs as the image's normal (likely non-root) default user. Write
       # access to the Filestore mount is granted via the one-time chown in
@@ -92,6 +103,7 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
       # see that file and the README for the exact command.
 
       resources {
+        cpu_idle = false
         limits = {
           cpu    = var.backend_cpu
           memory = var.backend_memory
@@ -116,7 +128,7 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
       }
       env {
         name  = "OPSRABBIT_NODE_BASE_URL"
-        value = "${local.application_origin}/api"
+        value = var.application_origin == null ? null : "${local.application_origin}/api"
       }
       env {
         name  = "OPSRABBIT_NODE_DATA_DIR"
@@ -132,7 +144,7 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.database_url.secret_id
-            version = "latest"
+            version = google_secret_manager_secret_version.database_url.version
           }
         }
       }
@@ -141,7 +153,7 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.better_auth_secret.secret_id
-            version = "latest"
+            version = google_secret_manager_secret_version.better_auth_secret.version
           }
         }
       }
@@ -150,7 +162,7 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.encryption_key.secret_id
-            version = "latest"
+            version = google_secret_manager_secret_version.encryption_key.version
           }
         }
       }
@@ -171,16 +183,12 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
         name       = "codex"
         mount_path = "/home/opsbot/.codex"
       }
-      volume_mounts {
-        name       = "cloudsql"
-        mount_path = "/cloudsql"
-      }
 
       startup_probe {
         initial_delay_seconds = 20
         period_seconds        = 10
         timeout_seconds       = 5
-        failure_threshold     = 30
+        failure_threshold     = 22
         http_get {
           path = "/health"
           port = 8384
@@ -237,10 +245,24 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
       }
     }
 
-    volumes {
-      name = "cloudsql"
-      cloud_sql_instance {
-        instances = [local.postgresql_connection_name]
+    containers {
+      name  = "cloudsql-proxy"
+      image = "gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.24.1"
+      args = [
+        "--private-ip",
+        "--address=0.0.0.0",
+        "--port=5432",
+        "--structured-logs",
+        local.postgresql_connection_name,
+      ]
+      resources {
+        cpu_idle = false
+        limits   = { cpu = "1", memory = "256Mi" }
+      }
+      startup_probe {
+        period_seconds    = 5
+        failure_threshold = 40
+        tcp_socket { port = 5432 }
       }
     }
 
@@ -250,8 +272,10 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
   depends_on = [
     google_artifact_registry_repository_iam_member.run_sa_pull,
     google_project_iam_member.run_sa_cloudsql_client,
-    google_project_iam_member.run_sa_secret_accessor,
+    google_secret_manager_secret_iam_member.run_sa_secret_accessor,
     google_filestore_instance.opsrabbit,
+    google_sql_database.opsrabbit,
+    google_sql_user.opsrabbit,
     google_secret_manager_secret_version.database_url,
     google_secret_manager_secret_version.better_auth_secret,
     google_secret_manager_secret_version.encryption_key,
