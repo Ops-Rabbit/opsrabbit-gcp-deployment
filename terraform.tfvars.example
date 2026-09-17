@@ -3,15 +3,15 @@ region      = "us-central1"
 name_prefix = "opsrabbit"
 
 # ---- Networking ----
-# A VPC is always created/used now (Filestore has no public-IP mode).
+# A VPC is always created/used now (Filestore has no public-IP mode), and
+# Cloud SQL is always private IP only as a result. Terraform itself never
+# needs to reach into the VPC, though -- the backend's own startup
+# migration creates the vector extension, using the network path Cloud
+# Run's Direct VPC egress already provides at runtime.
 create_vpc  = true
 subnet_cidr = "10.10.0.0/20"
 
 network_mode = "public"
-
-authorized_networks = [
-  { name = "terraform-runner", cidr = "203.0.113.10/32" },
-]
 
 allow_unauthenticated = true
 
@@ -27,9 +27,9 @@ postgresql_database_name       = "opsrabbit"
 postgresql_administrator_login = "opsrabbit_admin"
 
 # ---- Filestore ----
-filestore_tier         = "BASIC_HDD"
-filestore_capacity_gb  = 1024
-filestore_share_name   = "opsrabbit"
+filestore_tier        = "BASIC_HDD"
+filestore_capacity_gb = 1024
+filestore_share_name  = "opsrabbit"
 
 # Determine with: docker run --rm --entrypoint sh <backend_image> -c "id -u; id -g"
 backend_uid = 1000

@@ -19,7 +19,7 @@ Terraform for deploying OpsRabbit on Google Cloud.
 | File | Purpose |
 |---|---|
 | `versions.tf` | Terraform and provider version constraints |
-| `providers.tf` | google / google-beta / postgresql provider config |
+| `providers.tf` | google provider config |
 | `variables.tf` | Inputs and validation |
 | `locals.tf` | Computed values (DB DSN, origin URL, Filestore IP) |
 | `network.tf` | VPC, subnet, private services access |

@@ -16,7 +16,7 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
     vpc_access {
       network_interfaces {
         network    = local.vpc_name
-        subnetwork = var.create_vpc ? google_compute_subnetwork.opsrabbit[0].name : null
+        subnetwork = local.subnet_self_link
       }
       egress = "PRIVATE_RANGES_ONLY"
     }
@@ -252,7 +252,6 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
     google_project_iam_member.run_sa_cloudsql_client,
     google_project_iam_member.run_sa_secret_accessor,
     google_filestore_instance.opsrabbit,
-    postgresql_extension.vector,
     google_secret_manager_secret_version.database_url,
     google_secret_manager_secret_version.better_auth_secret,
     google_secret_manager_secret_version.encryption_key,

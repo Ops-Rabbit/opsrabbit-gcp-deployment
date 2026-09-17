@@ -28,7 +28,7 @@ resource "google_cloud_run_v2_job" "filestore_init" {
       vpc_access {
         network_interfaces {
           network    = local.vpc_name
-          subnetwork = var.create_vpc ? google_compute_subnetwork.opsrabbit[0].name : null
+          subnetwork = local.subnet_self_link
         }
         egress = "PRIVATE_RANGES_ONLY"
       }

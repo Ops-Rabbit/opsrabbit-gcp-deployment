@@ -11,7 +11,7 @@ output "postgresql_instance_connection_name" {
 }
 
 output "postgresql_host" {
-  value = local.postgresql_connect_host
+  value = google_sql_database_instance.opsrabbit.private_ip_address
 }
 
 output "filestore_ip_address" {

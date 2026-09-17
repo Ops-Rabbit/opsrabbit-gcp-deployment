@@ -22,11 +22,12 @@ variable "labels" {
 # ---------------------------------------------------------------------------
 # Networking
 # ---------------------------------------------------------------------------
-# A VPC is always required now (Filestore has no public-IP mode), unlike the
-# earlier GCS-FUSE version where it was only needed for network_mode =
-# "private". network_mode itself now controls just two things: Cloud Run
-# ingress (public internet vs internal-only) and whether Cloud SQL gets a
-# public IP with authorized_networks or a private IP only.
+# A VPC is always required (Filestore has no public-IP mode), and Cloud Run
+# always has Direct VPC egress as a result -- so Cloud SQL is always private
+# IP only too, regardless of network_mode; there's no configuration left
+# where a public Cloud SQL IP would actually be needed. network_mode
+# controls exactly one thing now: Cloud Run ingress (public internet vs
+# internal-only).
 
 variable "network_mode" {
   type    = string
@@ -36,15 +37,6 @@ variable "network_mode" {
     condition     = contains(["public", "private"], var.network_mode)
     error_message = "network_mode must be \"public\" or \"private\"."
   }
-}
-
-variable "authorized_networks" {
-  description = "CIDR blocks allowed to reach Cloud SQL's public IP. Only used when network_mode = \"public\"."
-  type = list(object({
-    name = string
-    cidr = string
-  }))
-  default = []
 }
 
 variable "create_vpc" {
@@ -208,6 +200,27 @@ variable "opsrabbit_encryption_key" {
 
 variable "application_origin" {
   description = "Public HTTPS origin, e.g. \"https://opsrabbit.example.com\". If null, the Cloud Run-assigned URL is used."
+  type        = string
+  default     = null
+}
+
+# ---------------------------------------------------------------------------
+# Encryption at rest (optional, defaults to Google-managed keys)
+# ---------------------------------------------------------------------------
+
+variable "kms_key_name" {
+  description = <<-EOT
+    Optional Cloud KMS key (format:
+    projects/P/locations/L/keyRings/R/cryptoKeys/K) for customer-managed
+    encryption at rest on Cloud SQL, Filestore, and Artifact Registry.
+    Leave null (default) to use Google-managed encryption, which is the
+    default for every GCP storage service here and sufficient for most
+    deployments. Only set this if a customer's compliance requirements
+    specifically mandate CMEK. The key must already exist, and the
+    relevant Google service agent needs
+    roles/cloudkms.cryptoKeyEncrypterDecrypter on it before this is set --
+    see SECURITY.md for the exact service agents and setup order.
+  EOT
   type        = string
   default     = null
 }

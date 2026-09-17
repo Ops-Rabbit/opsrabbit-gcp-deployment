@@ -28,6 +28,7 @@ resource "google_artifact_registry_repository" "opsrabbit" {
   repository_id = var.name_prefix
   description   = "OpsRabbit backend/web images."
   format        = "DOCKER"
+  kms_key_name  = var.kms_key_name # null = Google-managed encryption (default)
   labels        = local.common_labels
 
   depends_on = [google_project_service.required]
@@ -68,10 +69,11 @@ resource "google_project_iam_member" "run_sa_secret_accessor" {
 # ---------------------------------------------------------------------------
 
 resource "google_filestore_instance" "opsrabbit" {
-  project  = var.project_id
-  name     = "${var.name_prefix}-fs"
-  location = "${var.region}-b"
-  tier     = var.filestore_tier
+  project      = var.project_id
+  name         = "${var.name_prefix}-fs"
+  location     = "${var.region}-b"
+  tier         = var.filestore_tier
+  kms_key_name = var.kms_key_name # null = Google-managed encryption (default)
 
   file_shares {
     capacity_gb = var.filestore_capacity_gb
@@ -106,6 +108,7 @@ resource "google_sql_database_instance" "opsrabbit" {
   region              = var.region
   database_version    = "POSTGRES_16"
   deletion_protection = true
+  encryption_key_name = var.kms_key_name # null = Google-managed encryption (default)
 
   settings {
     tier              = var.postgresql_tier
@@ -123,17 +126,42 @@ resource "google_sql_database_instance" "opsrabbit" {
       }
     }
 
+    # tfsec's google-sql-encrypt-in-transit-data check (as of tfsec
+    # v1.28.14) only recognizes the older `require_ssl` attribute, which
+    # was removed from this provider version's schema (confirmed via
+    # `terraform validate` -- "require_ssl" is not a valid argument on
+    # provider ~> 6.15). ssl_mode = "ENCRYPTED_ONLY" is the current,
+    # schema-valid way to enforce the same thing: TLS required for every
+    # connection. This is a scanner-version gap, not a missing control.
+    #tfsec:ignore:google-sql-encrypt-in-transit-data
     ip_configuration {
-      ipv4_enabled    = var.network_mode == "public"
-      private_network = var.network_mode == "private" ? local.vpc_self_link : null
+      ipv4_enabled    = false
+      private_network = local.vpc_self_link
+      ssl_mode        = "ENCRYPTED_ONLY"
+    }
 
-      dynamic "authorized_networks" {
-        for_each = var.network_mode == "public" ? var.authorized_networks : []
-        content {
-          name  = authorized_networks.value.name
-          value = authorized_networks.value.cidr
-        }
-      }
+    # Postgres audit/diagnostic logging -- required for the compliance
+    # posture this product needs when deployed into customer accounts,
+    # not optional extras.
+    database_flags {
+      name  = "log_temp_files"
+      value = "0" # log all temp files, not just ones above a size threshold
+    }
+    database_flags {
+      name  = "log_connections"
+      value = "on"
+    }
+    database_flags {
+      name  = "log_disconnections"
+      value = "on"
+    }
+    database_flags {
+      name  = "log_lock_waits"
+      value = "on"
+    }
+    database_flags {
+      name  = "log_checkpoints"
+      value = "on"
     }
 
     user_labels = local.common_labels
@@ -166,19 +194,11 @@ resource "google_sql_user" "opsrabbit" {
   password = var.postgresql_administrator_password
 }
 
-resource "postgresql_extension" "vector" {
-  name           = "vector"
-  database       = google_sql_database.opsrabbit.name
-  schema         = "public"
-  create_cascade = false
-  drop_cascade   = false
-
-  depends_on = [
-    google_sql_database.opsrabbit,
-    google_sql_user.opsrabbit,
-  ]
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
+# No postgresql_extension resource here. The backend's own Drizzle
+# migration (0000_fantastic_marvel_apes.sql) runs `create extension if
+# not exists vector;` on startup, using the same DATABASE_URL credentials
+# -- it's already inside the VPC via Cloud Run's Direct VPC egress by the
+# time it runs. Terraform creating the extension too would be redundant,
+# and having Terraform never need to open a connection into the private
+# database removes an entire category of operational complexity (no
+# bastion/tunnel required just to run `terraform apply`).

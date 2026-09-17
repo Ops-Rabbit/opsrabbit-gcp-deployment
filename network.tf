@@ -24,11 +24,30 @@ resource "google_compute_subnetwork" "opsrabbit" {
   network                  = google_compute_network.opsrabbit[0].id
   ip_cidr_range            = var.subnet_cidr
   private_ip_google_access = true
+
+  log_config {
+    aggregation_interval = "INTERVAL_10_MIN"
+    flow_sampling        = 0.5
+    metadata             = "INCLUDE_ALL_METADATA"
+  }
 }
 
 locals {
-  vpc_self_link    = var.create_vpc ? google_compute_network.opsrabbit[0].id : var.existing_network_self_link
-  vpc_name         = var.create_vpc ? google_compute_network.opsrabbit[0].name : null
+  vpc_self_link = var.create_vpc ? google_compute_network.opsrabbit[0].id : var.existing_network_self_link
+
+  # google_filestore_instance needs the network's short NAME, not a full
+  # self-link. When create_vpc=true, the created resource's .name attribute
+  # already is that. When false, the existing self-link (e.g.
+  # "projects/P/global/networks/my-vpc") has to be parsed to pull out
+  # just "my-vpc" -- falling back to null here (as this used to) breaks
+  # Filestore provisioning any time create_vpc = false, since networks.network
+  # is a required, non-nullable argument.
+  vpc_name = var.create_vpc ? google_compute_network.opsrabbit[0].name : (
+    var.existing_network_self_link != null
+    ? element(split("/", var.existing_network_self_link), length(split("/", var.existing_network_self_link)) - 1)
+    : null
+  )
+
   subnet_self_link = var.create_vpc ? google_compute_subnetwork.opsrabbit[0].id : var.existing_subnet_self_link
 }
 
