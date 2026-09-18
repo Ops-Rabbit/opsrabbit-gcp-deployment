@@ -1,0 +1,10 @@
+# Copy this to backend.tf and fill in with your state storage bucket.
+# Never commit backend.tf itself -- it's environment-specific and
+# already excluded in .gitignore.
+
+terraform {
+  backend "gcs" {
+    bucket = "my-org-terraform-state"
+    prefix = "opsrabbit"
+  }
+}
