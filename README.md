@@ -37,7 +37,8 @@ Terraform for deploying OpsRabbit on Google Cloud.
 - A deployment identity able to enable APIs, create resources/service accounts/custom roles, manage project and secret IAM, and act as the runtime, workflow, and scheduler service accounts (`roles/editor` alone is insufficient)
 - `gcloud` CLI authenticated to the target project
 - Terraform `>= 1.15`, `google` provider `>= 6.15`
-- Python 3.10+ for offline workflow tests
+- Python 3.10+ for offline workflow tests (CI uses 3.12)
+- TFLint 0.64.0 and Trivy 0.74.0 for local lint/security checks
 - An approved OpsRabbit release manifest and read access to OpsRabbit's ECR repositories
 - Encrypted, access-controlled GCS bucket for Terraform state
 
@@ -260,3 +261,44 @@ Before promotion, use a disposable staging project to verify:
 Basic SSD requires at least 2560 GiB; Basic HDD requires 1024 GiB. The supported
 Basic tiers cannot use CMEK, so non-null `kms_key_name` values are rejected.
 Cloud SQL storage grows automatically; monitor capacity and cost.
+
+## Local and CI checks
+
+CI uses the same Make targets as local development:
+
+| Command | Purpose |
+|---|---|
+| `make fmt-check` | Check Terraform formatting without changing files |
+| `make validate` | Initialize without a backend and validate configuration |
+| `make lint` | Initialize the pinned Google ruleset and run TFLint |
+| `make security` | Scan Terraform with Trivy; findings of any severity fail |
+| `make test` | Run mocked Terraform plans and offline Python tests |
+| `make check` | Run all of the above |
+
+Install the tool versions listed above; Terraform remains pinned to 1.15.9 in CI.
+`TRIVY=/path/to/trivy` and `PYTHON=/path/to/python3` can override local executable
+paths, for example `make check TRIVY=/path/to/trivy`.
+
+Checks initialize Terraform with `-backend=false -input=false -lockfile=readonly`.
+They do not authenticate to GCP or read remote state. Provider/plugin/tool
+installation may download public binaries. `make init`, `make plan`, and
+`make apply` remain separate deployment commands and are never called by CI.
+
+Trivy replaces tfsec and scans configuration only, using synthetic inputs in
+`tests/security.tfvars.example`. It does not pull application images or query
+GCP. `--skip-check-update` avoids network downloads of policy updates; a fresh
+installation falls back to checks embedded in the pinned Trivy binary. Trivy
+logs this fallback at ERROR level even though scanning succeeds. Existing
+cached policy bundles can be used locally; use a clean Trivy cache when comparing
+to CI. Upgrade the pinned scanner periodically to refresh embedded checks.
+
+The one resource-scoped `AVD-GCP-0015` exception documents the scanner's failure
+to recognise `ssl_mode = "ENCRYPTED_ONLY"`. A mocked regression test verifies that
+TLS remains required; there is no global rule suppression.
+
+The workflow uses Node 24 actions pinned to commit SHAs, explicit tool versions,
+a fixed Ubuntu release, 15-minute job timeouts, and cancellation of superseded
+runs. It runs on pushes to main and feature/gcp-deployment, PRs targeting main,
+and manual dispatch. Weekly Dependabot PRs update action pins; executable
+versions in the workflow environment are maintained separately. No GCP secrets
+or authentication steps are present.

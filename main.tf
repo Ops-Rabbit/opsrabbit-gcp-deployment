@@ -138,14 +138,9 @@ resource "google_sql_database_instance" "opsrabbit" {
       }
     }
 
-    # tfsec's google-sql-encrypt-in-transit-data check (as of tfsec
-    # v1.28.14) only recognizes the older `require_ssl` attribute, which
-    # was removed from this provider version's schema (confirmed via
-    # `terraform validate` -- "require_ssl" is not a valid argument on
-    # provider ~> 6.15). ssl_mode = "ENCRYPTED_ONLY" is the current,
-    # schema-valid way to enforce the same thing: TLS required for every
-    # connection. This is a scanner-version gap, not a missing control.
-    #tfsec:ignore:google-sql-encrypt-in-transit-data
+    # Trivy 0.74.0's GCP-0015 still checks removed require_ssl, not ssl_mode.
+    # ENCRYPTED_ONLY enforces TLS; tests/deployment_regressions.tftest.hcl also checks it.
+    #trivy:ignore:AVD-GCP-0015
     ip_configuration {
       ipv4_enabled    = false
       private_network = local.vpc_self_link

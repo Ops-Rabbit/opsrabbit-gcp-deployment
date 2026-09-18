@@ -155,3 +155,11 @@ run "secret_rotation_changes_revision_template" {
     error_message = "Retain previous secret versions for revision rollback."
   }
 }
+
+run "database_requires_tls" {
+  command = plan
+  assert {
+    condition     = google_sql_database_instance.opsrabbit.settings[0].ip_configuration[0].ssl_mode == "ENCRYPTED_ONLY"
+    error_message = "Cloud SQL must enforce TLS; this guards the documented Trivy GCP-0015 scanner exception."
+  }
+}

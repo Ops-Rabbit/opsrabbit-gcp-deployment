@@ -7,6 +7,8 @@ installation can download public binaries; tests do not call Google APIs.
 - `*.tftest.hcl`: mocked Google-provider plans, including invalid inputs,
   private-IP connectivity, startup budgets, secret version changes in revision
   templates, least-privilege secret bindings, and backup configuration.
+- `security.tfvars.example`: synthetic inputs for Trivy static analysis, never
+  deployment credentials.
 - `test_offline_behavior.py`: executes the backup YAML with deterministic fake
   HTTP responses and fake sleeps. Covers creation/operation failure, timeout,
   pagination, retention boundaries, unrelated backups, and deletion failures.

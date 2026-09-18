@@ -1,0 +1,11 @@
+# Synthetic values for local static scanning only. Never use for deployment.
+project_id = "test-project"
+application_enabled = true
+application_origin = "https://opsrabbit.example.com"
+backend_uid = 1000
+backend_gid = 1000
+backend_image = "us-central1-docker.pkg.dev/test-project/opsrabbit/backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+web_image = "us-central1-docker.pkg.dev/test-project/opsrabbit/web@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+postgresql_administrator_password = "synthetic-scan-password"
+better_auth_secret = "synthetic-scan-auth-secret"
+opsrabbit_encryption_key = "synthetic-scan-encryption-key"
