@@ -1,7 +1,7 @@
 TRIVY ?= trivy
 PYTHON ?= python3
 
-.PHONY: fmt fmt-check validate lint security test init init-check check plan apply clean
+.PHONY: fmt fmt-check validate lint security test init init-check lock-providers check plan apply clean
 
 fmt:
 	terraform fmt -recursive
@@ -11,6 +11,10 @@ fmt-check:
 
 init:
 	terraform init
+
+# Refresh checksums for CI (Linux x86_64) and local Apple Silicon development.
+lock-providers:
+	terraform providers lock -platform=linux_amd64 -platform=darwin_arm64
 
 init-check:
 	terraform init -backend=false -input=false -lockfile=readonly

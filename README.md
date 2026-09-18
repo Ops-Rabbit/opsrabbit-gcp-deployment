@@ -280,6 +280,10 @@ Install the tool versions listed above; Terraform remains pinned to 1.15.9 in CI
 paths, for example `make check TRIVY=/path/to/trivy`.
 
 Checks initialize Terraform with `-backend=false -input=false -lockfile=readonly`.
+The committed lockfile includes Linux x86_64 and macOS ARM64 package hashes.
+After changing provider versions, run `make lock-providers` and commit the
+updated `.terraform.lock.hcl` before running CI. This downloads signed provider
+packages from the public registry, without connecting to GCP.
 They do not authenticate to GCP or read remote state. Provider/plugin/tool
 installation may download public binaries. `make init`, `make plan`, and
 `make apply` remain separate deployment commands and are never called by CI.
