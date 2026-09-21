@@ -196,3 +196,18 @@ run "event_stream_limits_are_configurable" {
     error_message = "Custom request limits must propagate without enabling multiple background-worker instances."
   }
 }
+
+run "agent_state_label_preserves_existing_storage" {
+  command = plan
+  variables { application_enabled = true }
+  assert {
+    condition = anytrue([
+      for mount in google_cloud_run_v2_service.opsrabbit[0].template[0].containers[1].volume_mounts :
+      mount.name == "agent-state" && mount.mount_path == "/home/opsbot/.codex"
+      ]) && anytrue([
+      for volume in google_cloud_run_v2_service.opsrabbit[0].template[0].volumes :
+      volume.name == "agent-state" && try(volume.nfs[0].path == "/${var.filestore_share_name}/codex", false)
+    ])
+    error_message = "The neutral volume label must retain the image's runtime path and existing NFS data directory."
+  }
+}

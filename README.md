@@ -160,7 +160,8 @@ Set `backend_image` / `web_image` in `terraform.tfvars` to the resulting
 Set `application_origin` to the HTTPS origin clients will actually use, without
 an API path or trailing slash. It is required when enabling the service. For a
 custom domain, provision DNS and HTTPS routing separately; this module does not
-create domain mappings or a load balancer. To use Cloud Run's deterministic URL,
+create public domain mappings or a public load balancer. Private mode provisions
+an internal load balancer as described below. To use Cloud Run's deterministic URL,
 obtain the project number with `gcloud projects describe PROJECT_ID
 --format='value(projectNumber)'` and use
 `https://NAME_PREFIX-app-PROJECT_NUMBER.REGION.run.app`.
@@ -185,14 +186,12 @@ rm -f deployment.tfplan
 terraform output
 ```
 
-The backend's own healthcheck hits `http://127.0.0.1:8384/health` directly
-(no `/api` prefix) — that's what this repo's Cloud Run startup/liveness
-probes use. Not yet confirmed: whether the public URL, going through the
-`web` container's nginx proxy, exposes that same endpoint at `/health` or
-`/api/health`. Check both when testing:
+The container startup/liveness probes call the backend directly at
+`http://127.0.0.1:8384/health`. Through the web proxy, use `/api/health` and verify
+that it returns JSON with `ok: true`. The public `/health` path can return the
+frontend HTML, so an HTTP 200 there does not establish backend health.
 
 ```bash
-curl --fail --show-error "$(terraform output -raw opsrabbit_url)/health"
 curl --fail --show-error "$(terraform output -raw opsrabbit_url)/api/health"
 ```
 
@@ -292,8 +291,22 @@ backup of the current state. Record the backup ID, restore duration, and checks.
 security checks, mocked Terraform regression tests, and offline Python workflow
 and dependency tests. Test initialization disables the remote backend. It does
 not deploy or require GCP credentials. Provider/plugin installation may download
-public binaries. See [tests/README.md](tests/README.md) for test boundaries.
-The mock tests do not validate image entrypoints or call Google APIs.
+public binaries. The mock tests do not validate image entrypoints or call Google APIs.
+
+The Terraform suites in `tests/*.tftest.hcl` cover plan behavior, input validation,
+private ingress, runtime connections, request limits, secret versions, and backups.
+`tests/test_offline_behavior.py` checks dependency ordering and runs the backup
+workflow with fake HTTP responses and sleeps to exercise failures, timeouts,
+pagination, and retention. Its limited workflow interpreter rejects unsupported
+operations and socket creation; it does not validate the Google Workflows engine.
+The Python tests use only the standard library.
+
+Run `make test` from a clean checkout without a configured deployment backend.
+For a checkout already initialized against remote state, use a separate temporary
+source copy without `backend.tf`, `.terraform`, local secrets, or saved plans;
+`-backend=false` alone does not clear previously initialized backend metadata.
+CI uses a clean checkout. Live startup, authentication, persistence, and recovery
+checks are separate from these offline suites.
 
 Before promotion, use a disposable staging project to verify:
 

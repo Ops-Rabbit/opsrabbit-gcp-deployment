@@ -191,8 +191,9 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
         name       = "agent-browser"
         mount_path = "/home/opsbot/.agent-browser"
       }
+      # The image expects this runtime path; keep the existing persistent data.
       volume_mounts {
-        name       = "codex"
+        name       = "agent-state"
         mount_path = "/home/opsbot/.codex"
       }
 
@@ -248,8 +249,9 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
       }
     }
 
+    # Preserve the on-disk directory across upgrades; only the volume label changes.
     volumes {
-      name = "codex"
+      name = "agent-state"
       nfs {
         server    = local.filestore_ip_address
         path      = "/${var.filestore_share_name}/codex"
