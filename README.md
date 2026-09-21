@@ -29,8 +29,6 @@ Terraform for deploying OpsRabbit on Google Cloud.
 | `secrets.tf` | Secret Manager secrets |
 | `cloud-run.tf` | The Cloud Run v2 service |
 | `private-ingress.tf` | Optional internal HTTPS load balancer and source allowlist |
-| `PRIVATE-DEPLOYMENT.md` | Customer network, DNS and TLS responsibilities |
-| `STAGING-TEARDOWN.md` | Teardown guards and managed-service cleanup delays |
 | `outputs.tf` | Deployment addresses and resource names |
 | `terraform.tfvars.example` | Secret-free example input |
 
@@ -204,8 +202,7 @@ during a routine image upgrade.
 
 ## Private networking
 
-For VPN-only access, see [Private deployment](PRIVATE-DEPLOYMENT.md) and
-[`private.tfvars.example`](private.tfvars.example). Private mode provisions an
+For VPN-only access, use [`private.tfvars.example`](private.tfvars.example). Private mode provisions an
 internal HTTPS load balancer and source allowlist while disabling direct
 Cloud Run URLs. The customer supplies VPN connectivity, DNS and TLS certificates.
 
