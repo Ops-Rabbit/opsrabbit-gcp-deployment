@@ -174,3 +174,25 @@ run "database_requires_tls" {
     error_message = "Cloud SQL must enforce TLS; this guards the documented Trivy GCP-0015 scanner exception."
   }
 }
+
+run "event_streams_leave_capacity_for_api_requests" {
+  command = plan
+  variables { application_enabled = true }
+  assert {
+    condition     = google_cloud_run_v2_service.opsrabbit[0].template[0].max_instance_request_concurrency == 20 && google_cloud_run_v2_service.opsrabbit[0].template[0].timeout == "3600s"
+    error_message = "Default event streams must leave request capacity and must not inherit the five-minute timeout."
+  }
+}
+
+run "event_stream_limits_are_configurable" {
+  command = plan
+  variables {
+    application_enabled               = true
+    cloud_run_concurrency             = 10
+    cloud_run_request_timeout_seconds = 600
+  }
+  assert {
+    condition     = google_cloud_run_v2_service.opsrabbit[0].template[0].max_instance_request_concurrency == 10 && google_cloud_run_v2_service.opsrabbit[0].template[0].timeout == "600s" && google_cloud_run_v2_service.opsrabbit[0].template[0].scaling[0].max_instance_count == 1
+    error_message = "Custom request limits must propagate without enabling multiple background-worker instances."
+  }
+}

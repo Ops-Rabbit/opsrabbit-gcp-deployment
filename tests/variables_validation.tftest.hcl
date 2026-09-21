@@ -53,3 +53,39 @@ run "accepts_valid_defaults" {
   command = plan
   # No overrides -- confirms the documented defaults actually plan clean.
 }
+
+run "rejects_single_request_slot" {
+  command = plan
+  variables { cloud_run_concurrency = 1 }
+  expect_failures = [var.cloud_run_concurrency]
+}
+
+run "rejects_fractional_concurrency" {
+  command = plan
+  variables { cloud_run_concurrency = 2.5 }
+  expect_failures = [var.cloud_run_concurrency]
+}
+
+run "rejects_excessive_concurrency" {
+  command = plan
+  variables { cloud_run_concurrency = 1001 }
+  expect_failures = [var.cloud_run_concurrency]
+}
+
+run "rejects_zero_request_timeout" {
+  command = plan
+  variables { cloud_run_request_timeout_seconds = 0 }
+  expect_failures = [var.cloud_run_request_timeout_seconds]
+}
+
+run "rejects_excessive_request_timeout" {
+  command = plan
+  variables { cloud_run_request_timeout_seconds = 3601 }
+  expect_failures = [var.cloud_run_request_timeout_seconds]
+}
+
+run "rejects_fractional_request_timeout" {
+  command = plan
+  variables { cloud_run_request_timeout_seconds = 1.5 }
+  expect_failures = [var.cloud_run_request_timeout_seconds]
+}

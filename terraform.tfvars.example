@@ -20,6 +20,11 @@ allow_unauthenticated = true
 backend_image = "us-central1-docker.pkg.dev/my-gcp-project/opsrabbit/backend@sha256:REPLACE_ME"
 web_image     = "us-central1-docker.pkg.dev/my-gcp-project/opsrabbit/web@sha256:REPLACE_ME"
 
+# ---- Request handling ----
+# Open event streams count against concurrency; retain capacity for other API calls.
+cloud_run_concurrency             = 20
+cloud_run_request_timeout_seconds = 3600
+
 # ---- Cloud SQL ----
 postgresql_instance_name       = "opsrabbit-pg"
 postgresql_tier                = "db-custom-2-8192"

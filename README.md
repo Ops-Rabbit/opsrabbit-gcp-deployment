@@ -233,11 +233,19 @@ verify database access and login. Do not rotate the encryption key without an
 application-supported data migration; pinning versions does not re-encrypt data.
 
 One warm instance with continuously allocated CPU supports background work and
-incurs idle compute charges. Request concurrency and revision maximum instances
-are set to one. These are not distributed locks: revisions can overlap during a
-rollout, and one request can launch multiple background jobs. Cloud Run NFS has
-no locking support. Until the application proves safe concurrency, quiesce jobs
-before upgrades and test git/browser/session persistence in staging.
+incurs idle compute charges. `cloud_run_concurrency` defaults to 20 so long-lived
+event streams leave capacity for health checks and other API calls. Setting it
+to one can cause HTTP 429 responses even with low CPU and memory usage.
+`cloud_run_request_timeout_seconds` defaults to 3600 (one hour); streams still
+need client reconnection when that deadline expires. Tune concurrency against
+staging workload measurements before adding CPU or memory.
+
+Revision maximum instances remains one to limit independent background workers
+sharing persistent files. Request concurrency is not a filesystem lock: multiple
+requests and background jobs can write concurrently, and revisions can overlap
+during a rollout. Cloud Run NFS has no locking support. Until the application
+proves safe concurrency, quiesce jobs before upgrades and test git/browser/session
+persistence in staging.
 
 ## Filestore backup and restore
 

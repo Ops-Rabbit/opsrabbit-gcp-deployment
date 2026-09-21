@@ -21,7 +21,8 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
   template {
     service_account                  = google_service_account.run_sa.email
     execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
-    max_instance_request_concurrency = 1
+    max_instance_request_concurrency = var.cloud_run_concurrency
+    timeout                          = "${var.cloud_run_request_timeout_seconds}s"
 
     # Keep background work running and limit concurrent writers to the share.
     # Revision rollouts can still overlap; see the staging checklist in README.

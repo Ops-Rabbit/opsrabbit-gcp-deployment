@@ -156,6 +156,29 @@ variable "web_image" {
   }
 }
 
+# Event streams remain open while the UI makes other API requests.
+variable "cloud_run_concurrency" {
+  type        = number
+  description = "Maximum simultaneous requests per instance, including open event streams."
+  default     = 20
+
+  validation {
+    condition     = var.cloud_run_concurrency >= 2 && var.cloud_run_concurrency <= 1000 && floor(var.cloud_run_concurrency) == var.cloud_run_concurrency
+    error_message = "cloud_run_concurrency must be an integer between 2 and 1000; event streams need room for other API requests."
+  }
+}
+
+variable "cloud_run_request_timeout_seconds" {
+  type        = number
+  description = "Request lifetime, including event streams; clients must reconnect when it expires."
+  default     = 3600
+
+  validation {
+    condition     = var.cloud_run_request_timeout_seconds >= 1 && var.cloud_run_request_timeout_seconds <= 3600 && floor(var.cloud_run_request_timeout_seconds) == var.cloud_run_request_timeout_seconds
+    error_message = "cloud_run_request_timeout_seconds must be an integer between 1 and 3600."
+  }
+}
+
 variable "backend_cpu" {
   type    = string
   default = "1"
