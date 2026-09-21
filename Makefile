@@ -27,7 +27,10 @@ lint:
 	tflint -f compact
 
 security:
+	@echo "Scanning public mode"
 	$(TRIVY) config --exit-code 1 --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --skip-check-update --misconfig-scanners terraform --tf-vars tests/security.tfvars.example --skip-dirs .terraform .
+	@echo "Scanning private mode"
+	$(TRIVY) config --exit-code 1 --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --skip-check-update --misconfig-scanners terraform --tf-vars tests/security-private.tfvars.example --skip-dirs .terraform .
 
 test: init-check
 	terraform test

@@ -1,11 +1,22 @@
 resource "google_cloud_run_v2_service" "opsrabbit" {
-  count = var.application_enabled ? 1 : 0
+  provider = google-beta
+  count    = var.application_enabled ? 1 : 0
 
-  project             = var.project_id
-  name                = "${var.name_prefix}-app"
-  location            = var.region
-  deletion_protection = true
-  ingress             = var.network_mode == "private" ? "INGRESS_TRAFFIC_INTERNAL_ONLY" : "INGRESS_TRAFFIC_ALL"
+  project              = var.project_id
+  name                 = "${var.name_prefix}-app"
+  location             = var.region
+  deletion_protection  = true
+  ingress              = var.network_mode == "private" ? "INGRESS_TRAFFIC_INTERNAL_ONLY" : "INGRESS_TRAFFIC_ALL"
+  default_uri_disabled = var.network_mode == "private"
+  # Private clients authenticate with OpsRabbit. The ILB and Cloud Armor enforce
+  # network access; the disabled default URL prevents bypassing their allowlist.
+  invoker_iam_disabled = var.network_mode == "private"
+
+  # Cloud Run returns this service-level default even when omitted. Keep it
+  # explicit to avoid perpetual drift; the revision below keeps one instance warm.
+  scaling {
+    min_instance_count = 0
+  }
 
   template {
     service_account                  = google_service_account.run_sa.email

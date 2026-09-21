@@ -123,6 +123,8 @@ resource "google_sql_database_instance" "opsrabbit" {
   encryption_key_name = var.kms_key_name # null = Google-managed encryption (default)
 
   settings {
+    # PostgreSQL 16 otherwise defaults to Enterprise Plus, which rejects db-custom tiers.
+    edition           = "ENTERPRISE"
     tier              = var.postgresql_tier
     disk_size         = var.postgresql_disk_size_gb
     disk_autoresize   = true

@@ -11,6 +11,7 @@ name_prefix = "opsrabbit"
 create_vpc  = true
 subnet_cidr = "10.10.0.0/20"
 
+# For private mode, merge private.tfvars.example and provide customer connectivity/DNS/TLS.
 network_mode = "public"
 
 allow_unauthenticated = true

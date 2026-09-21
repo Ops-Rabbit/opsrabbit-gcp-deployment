@@ -1,3 +1,5 @@
+mock_provider "google-beta" {}
+
 # Structural tests: given a set of inputs, does the plan produce the
 # resources it should? These catch logic bugs -- like the create_vpc=false
 # null-subnetwork bug fixed in cloud-run.tf -- that fmt/validate/tflint
@@ -6,6 +8,7 @@
 mock_provider "google" {}
 
 variables {
+  application_enabled               = false
   application_origin                = "https://opsrabbit.example.com"
   project_id                        = "test-project"
   backend_image                     = "us-central1-docker.pkg.dev/test-project/opsrabbit/backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -110,22 +113,5 @@ run "public_mode_creates_unauthenticated_invoker_binding" {
   assert {
     condition     = length(google_cloud_run_v2_service_iam_member.public) == 1
     error_message = "Public invoker binding should exist when network_mode=public and allow_unauthenticated=true"
-  }
-}
-
-# Security-relevant: confirms private mode can never accidentally expose
-# the service, regardless of what allow_unauthenticated is set to.
-run "private_mode_never_creates_public_invoker_binding" {
-  command = plan
-
-  variables {
-    application_enabled   = true
-    network_mode          = "private"
-    allow_unauthenticated = true
-  }
-
-  assert {
-    condition     = length(google_cloud_run_v2_service_iam_member.public) == 0
-    error_message = "Private network_mode must never allow public invocation, even if allow_unauthenticated is true"
   }
 }

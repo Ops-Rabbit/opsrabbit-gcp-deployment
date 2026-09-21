@@ -20,7 +20,7 @@ Terraform for deploying OpsRabbit on Google Cloud.
 | File | Purpose |
 |---|---|
 | `versions.tf` | Terraform and provider version constraints |
-| `providers.tf` | google provider config |
+| `providers.tf` | Google and Google Beta provider config |
 | `variables.tf` | Inputs and validation |
 | `locals.tf` | Computed values (DB DSN, origin URL, Filestore IP) |
 | `network.tf` | VPC, subnet, private services access |
@@ -28,6 +28,9 @@ Terraform for deploying OpsRabbit on Google Cloud.
 | `filestore-init.tf` | One-time Cloud Run Job that sets Filestore share ownership |
 | `secrets.tf` | Secret Manager secrets |
 | `cloud-run.tf` | The Cloud Run v2 service |
+| `private-ingress.tf` | Optional internal HTTPS load balancer and source allowlist |
+| `PRIVATE-DEPLOYMENT.md` | Customer network, DNS and TLS responsibilities |
+| `STAGING-TEARDOWN.md` | Teardown guards and managed-service cleanup delays |
 | `outputs.tf` | Deployment addresses and resource names |
 | `terraform.tfvars.example` | Secret-free example input |
 
@@ -36,7 +39,7 @@ Terraform for deploying OpsRabbit on Google Cloud.
 - A GCP project with billing enabled
 - A deployment identity able to enable APIs, create resources/service accounts/custom roles, manage project and secret IAM, and act as the runtime, workflow, and scheduler service accounts (`roles/editor` alone is insufficient)
 - `gcloud` CLI authenticated to the target project
-- Terraform `>= 1.15`, `google` provider `>= 6.15`
+- Terraform `>= 1.15`; Google providers pinned by `.terraform.lock.hcl` (Google Beta 6.50.0 is required for private ingress)
 - Python 3.10+ for offline workflow tests (CI uses 3.12)
 - TFLint 0.64.0 and Trivy 0.74.0 for local lint/security checks
 - An approved OpsRabbit release manifest and read access to OpsRabbit's ECR repositories
@@ -104,6 +107,38 @@ gcloud run jobs execute "$(terraform output -raw filestore_init_job_name)" \
 
 ### 5. Import the OpsRabbit images
 
+For the approved ECR release, use the copy script after authenticating AWS and
+gcloud and starting Docker:
+
+```bash
+export PROJECT_ID=my-gcp-project ECR_ACCOUNT_ID=123456789012
+export BACKEND_DIGEST=sha256:REPLACE_WITH_APPROVED_BACKEND_DIGEST
+export WEB_DIGEST=sha256:REPLACE_WITH_APPROVED_WEB_DIGEST
+REGION=us-central1 REPOSITORY=opsrabbit ./scripts/copy-ecr-to-gar.sh
+```
+
+Set `AWS_PROFILE` if using a named AWS profile. Supply `PROJECT_ID`, `ECR_ACCOUNT_ID`,
+`BACKEND_DIGEST`, and `WEB_DIGEST` explicitly for the approved release. It checks
+both ECR digests, enables Artifact Registry, creates
+the Docker repository if missing, copies `linux/amd64` images, and verifies exact
+destination digest equality. Temporary Docker credentials are deleted on exit.
+It prints immutable Terraform image references and does not deploy the app.
+
+If running this **before the infrastructure bootstrap**, import the newly created
+repository into the initialized Terraform backend and generate a fresh plan:
+
+```bash
+terraform import google_artifact_registry_repository.opsrabbit \
+  projects/my-gcp-project/locations/us-central1/repositories/opsrabbit
+terraform plan -out=bootstrap.tfplan
+```
+
+Use your actual project, region, and repository in the import ID.
+Terraform authentication and deployment variables are required for
+import. Do not reuse a plan saved before the import.
+
+Alternatively, copy the images manually:
+
 ```bash
 export AR_REPO="$(terraform output -raw artifact_registry_repository)"
 gcloud auth configure-docker "$(echo "$AR_REPO" | cut -d/ -f1)"
@@ -167,6 +202,13 @@ Get the next approved release manifest, re-import both digests, update
 `backend_image` / `web_image`, `plan`/`apply`. Don't touch Cloud SQL,
 Filestore, `BETTER_AUTH_SECRET`, the encryption key, or `network_mode`
 during a routine image upgrade.
+
+## Private networking
+
+For VPN-only access, see [Private deployment](PRIVATE-DEPLOYMENT.md) and
+[`private.tfvars.example`](private.tfvars.example). Private mode provisions an
+internal HTTPS load balancer and source allowlist while disabling direct
+Cloud Run URLs. The customer supplies VPN connectivity, DNS and TLS certificates.
 
 ## Destruction protection
 

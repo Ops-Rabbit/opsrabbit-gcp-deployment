@@ -1,3 +1,5 @@
+mock_provider "google-beta" {}
+
 # Tests the variable validation blocks themselves -- confirms bad input
 # is actually rejected at plan time, not just that valid input works.
 # Fully offline: mock_provider means no real GCP/Postgres calls happen.
@@ -5,6 +7,7 @@
 mock_provider "google" {}
 
 variables {
+  application_enabled               = false
   application_origin                = "https://opsrabbit.example.com"
   project_id                        = "test-project"
   backend_image                     = "us-central1-docker.pkg.dev/test-project/opsrabbit/backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

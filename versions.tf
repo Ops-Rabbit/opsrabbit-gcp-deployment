@@ -14,5 +14,11 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
+    google-beta = {
+      source = "hashicorp/google-beta"
+      # Matches the locked stable provider; required for default_uri_disabled
+      # and the regional backend service's Cloud Armor attachment.
+      version = "6.50.0"
+    }
   }
 }

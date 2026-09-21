@@ -31,7 +31,12 @@ output "project_id" {
 }
 
 output "opsrabbit_url" {
-  value = var.application_enabled ? google_cloud_run_v2_service.opsrabbit[0].uri : null
+  value = var.application_enabled ? (var.network_mode == "private" ? var.application_origin : google_cloud_run_v2_service.opsrabbit[0].uri) : null
+}
+
+output "private_load_balancer_ip" {
+  description = "Private frontend address for customer-managed DNS and VPN routes; null in public/bootstrap mode."
+  value       = try(google_compute_address.private_ingress[0].address, null)
 }
 
 output "cloud_run_service_name" {

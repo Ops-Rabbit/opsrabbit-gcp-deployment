@@ -26,18 +26,83 @@ variable "labels" {
 # always has Direct VPC egress as a result -- so Cloud SQL is always private
 # IP only too, regardless of network_mode; there's no configuration left
 # where a public Cloud SQL IP would actually be needed. network_mode
-# controls exactly one thing now: Cloud Run ingress (public internet vs
-# internal-only).
+# selects public Cloud Run ingress or an internal HTTPS load balancer with
+# source restrictions and no direct run.app access.
 
 variable "network_mode" {
-  type    = string
-  default = "public"
+  description = "Application exposure: public Cloud Run URL or private HTTPS ingress. VPN/private connectivity, DNS and certificates remain customer-managed."
+  type        = string
+  default     = "public"
 
   validation {
     condition     = contains(["public", "private"], var.network_mode)
     error_message = "network_mode must be \"public\" or \"private\"."
   }
 }
+
+variable "private_ingress" {
+  description = "Private HTTPS ingress. Customer supplies VPN/routes, approved source IPv4 CIDRs, regional Compute SSL certificates, and DNS. Supply an existing ACTIVE proxy-only subnet or a new non-overlapping /26-or-larger CIDR."
+  type = object({
+    allowed_source_cidrs            = list(string)
+    ssl_certificate_self_links      = list(string)
+    proxy_subnet_cidr               = optional(string)
+    existing_proxy_subnet_self_link = optional(string)
+    allow_global_access             = optional(bool, true)
+  })
+  default = null
+
+  validation {
+    condition     = var.network_mode != "private" || var.private_ingress != null
+    error_message = "Private mode requires private_ingress with source CIDRs, TLS certificates and a proxy-only subnet."
+  }
+  validation {
+    condition = var.private_ingress == null ? true : (
+      length(var.private_ingress.allowed_source_cidrs) >= 1 && length(var.private_ingress.allowed_source_cidrs) <= 10 &&
+      alltrue([for cidr in var.private_ingress.allowed_source_cidrs : can(cidrnetmask(cidr)) && try(tonumber(split("/", cidr)[1]) > 0, false)])
+    )
+    error_message = "Supply 1-10 approved IPv4 CIDRs; unrestricted /0 access is not allowed. Use the client or NAT source range visible to the load balancer."
+  }
+  validation {
+    condition = var.private_ingress == null ? true : (
+      length(var.private_ingress.ssl_certificate_self_links) >= 1 && length(var.private_ingress.ssl_certificate_self_links) <= 15 &&
+      alltrue([for cert in var.private_ingress.ssl_certificate_self_links : can(regex("^(https://www.googleapis.com/compute/v1/)?projects/${var.project_id}/regions/${var.region}/sslCertificates/[^/]+$", cert))])
+    )
+    error_message = "Supply 1-15 existing regional Compute SSL certificate references in this project and region. Their names must cover application_origin."
+  }
+  validation {
+    condition = var.private_ingress == null ? true : (
+      (var.private_ingress.proxy_subnet_cidr != null) != (var.private_ingress.existing_proxy_subnet_self_link != null)
+    )
+    error_message = "Supply exactly one of proxy_subnet_cidr or existing_proxy_subnet_self_link."
+  }
+  validation {
+    condition = try(var.private_ingress.proxy_subnet_cidr, null) == null ? true : (
+      can(cidrnetmask(var.private_ingress.proxy_subnet_cidr)) && try(tonumber(split("/", var.private_ingress.proxy_subnet_cidr)[1]) > 0 && tonumber(split("/", var.private_ingress.proxy_subnet_cidr)[1]) <= 26, false)
+    )
+    error_message = "The proxy-only subnet must be an IPv4 /26 or larger; choose an unused range that does not overlap the VPN or VPC."
+  }
+  validation {
+    condition = try(var.private_ingress.existing_proxy_subnet_self_link, null) == null ? true : (
+      !var.create_vpc && can(regex("^(https://www.googleapis.com/compute/v1/)?projects/${var.project_id}/regions/${var.region}/subnetworks/[^/]+$", var.private_ingress.existing_proxy_subnet_self_link))
+    )
+    error_message = "An existing proxy-only subnet requires create_vpc=false and a subnet reference in this project/region."
+  }
+  validation {
+    condition = var.private_ingress == null || var.network_mode != "private" || (
+      can(regex("^https://[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$", var.application_origin)) &&
+      !try(endswith(lower(var.application_origin), ".run.app"), true)
+    )
+    error_message = "Private mode requires application_origin as a customer HTTPS hostname on port 443, without a path or explicit port. The disabled run.app URL cannot be used."
+  }
+  validation {
+    condition = var.private_ingress == null || var.network_mode != "private" || var.create_vpc || (
+      can(regex("^(https://www.googleapis.com/compute/v1/)?projects/${var.project_id}/global/networks/[^/]+$", var.existing_network_self_link)) &&
+      can(regex("^(https://www.googleapis.com/compute/v1/)?projects/${var.project_id}/regions/${var.region}/subnetworks/[^/]+$", var.existing_subnet_self_link))
+    )
+    error_message = "Private mode with create_vpc=false requires network and frontend subnet references in the deployment project and region; cross-project Shared VPC is not supported."
+  }
+}
+
 
 variable "create_vpc" {
   description = "true (default): Terraform creates a dedicated VPC + subnet for Filestore/Cloud Run direct-VPC-egress. false: supply existing_network_self_link / existing_subnet_self_link instead."

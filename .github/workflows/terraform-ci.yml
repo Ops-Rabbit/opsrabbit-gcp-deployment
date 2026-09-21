@@ -95,5 +95,5 @@ jobs:
         with:
           version: ${{ env.TRIVY_VERSION }}
 
-      - name: Scan Terraform configuration
+      - name: Scan public and private Terraform configuration
         run: make security

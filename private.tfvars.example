@@ -1,0 +1,19 @@
+# Merge these network settings into your environment's Terraform inputs.
+# All other application/database/secret inputs remain required.
+network_mode = "private"
+create_vpc   = false
+existing_network_self_link = "projects/my-gcp-project/global/networks/customer-vpc"
+existing_subnet_self_link  = "projects/my-gcp-project/regions/us-central1/subnetworks/apps"
+application_origin        = "https://opsrabbit.internal.example.com"
+
+private_ingress = {
+  # Actual source ranges after VPN routing/NAT; not necessarily the VPN's public IP.
+  allowed_source_cidrs = ["10.80.0.0/24"]
+  ssl_certificate_self_links = [
+    "projects/my-gcp-project/regions/us-central1/sslCertificates/opsrabbit-internal"
+  ]
+  existing_proxy_subnet_self_link = "projects/my-gcp-project/regions/us-central1/subnetworks/regional-proxies"
+  # Alternatively omit existing_proxy_subnet_self_link and create one:
+  # proxy_subnet_cidr = "10.20.0.0/23"
+  allow_global_access = true
+}

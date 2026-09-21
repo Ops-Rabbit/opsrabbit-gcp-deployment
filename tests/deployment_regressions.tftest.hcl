@@ -1,3 +1,5 @@
+mock_provider "google-beta" {}
+
 # Structural tests: given a set of inputs, does the plan produce the
 # resources it should? These catch logic bugs -- like the create_vpc=false
 # null-subnetwork bug fixed in cloud-run.tf -- that fmt/validate/tflint
@@ -11,6 +13,7 @@ mock_provider "google" {
 }
 
 variables {
+  application_enabled               = false
   application_origin                = "https://opsrabbit.example.com"
   project_id                        = "test-project"
   backend_image                     = "us-central1-docker.pkg.dev/test-project/opsrabbit/backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -22,6 +25,14 @@ variables {
   backend_gid                       = 1000
 }
 
+
+run "postgres_custom_tier_requires_enterprise" {
+  command = plan
+  assert {
+    condition     = google_sql_database_instance.opsrabbit.settings[0].edition == "ENTERPRISE"
+    error_message = "PostgreSQL 16 custom tiers require an explicit Enterprise edition to avoid an API create failure."
+  }
+}
 
 run "runtime_connections_and_probes" {
   command = plan
