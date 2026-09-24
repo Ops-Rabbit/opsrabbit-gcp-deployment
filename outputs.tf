@@ -50,3 +50,18 @@ output "filestore_backup_workflow" {
 output "region" {
   value = var.region
 }
+
+output "gke_cluster_name" {
+  description = "GKE cluster used by the Helm deployment, or null when GKE is disabled."
+  value       = local.gke_enabled ? local.gke_cluster_name : null
+}
+
+output "gke_cluster_self_link" {
+  description = "GKE cluster self-link, or null when GKE is disabled."
+  value       = local.gke_enabled ? local.gke_cluster_self_link : null
+}
+
+output "gke_helm_release_name" {
+  description = "OpsRabbit Helm release name, or null when GKE is disabled."
+  value       = local.gke_enabled ? helm_release.opsrabbit[0].name : null
+}

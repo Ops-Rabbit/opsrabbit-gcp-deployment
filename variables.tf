@@ -341,3 +341,146 @@ variable "filestore_backup_retention_days" {
     error_message = "Backup retention must be a positive whole number of days."
   }
 }
+
+# ---------------------------------------------------------------------------
+# GKE deployment modes
+# ---------------------------------------------------------------------------
+
+variable "gke_deployment_mode" {
+  description = "Optional GKE deployment mode. Cloud Run remains the default; standard and autopilot create a cluster, while shared attaches to an existing cluster."
+  type        = string
+  default     = "disabled"
+
+  validation {
+    condition     = contains(["disabled", "standard", "shared", "autopilot"], var.gke_deployment_mode)
+    error_message = "gke_deployment_mode must be disabled, standard, shared, or autopilot."
+  }
+}
+
+variable "gke_cluster_name" {
+  description = "GKE cluster name to create, or existing cluster name when gke_deployment_mode is shared."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.gke_cluster_name == null || can(regex("^[a-z]([-a-z0-9]*[a-z0-9])?$", var.gke_cluster_name))
+    error_message = "gke_cluster_name must contain only lowercase letters, numbers, and hyphens, and start with a letter."
+  }
+  validation {
+    condition     = var.gke_deployment_mode != "shared" || var.gke_cluster_name != null
+    error_message = "gke_cluster_name is required when gke_deployment_mode is shared."
+  }
+}
+
+variable "gke_cluster_location" {
+  description = "GKE cluster region or zone. Regional clusters are recommended for production Standard deployments."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.gke_deployment_mode != "shared" || var.gke_cluster_location != null
+    error_message = "gke_cluster_location is required when gke_deployment_mode is shared."
+  }
+}
+
+variable "gke_network_self_link" {
+  description = "Optional GKE VPC self-link. Defaults to this module's VPC for created clusters."
+  type        = string
+  default     = null
+}
+
+variable "gke_subnetwork_self_link" {
+  description = "Optional GKE subnetwork self-link. Defaults to this module's subnetwork for created clusters."
+  type        = string
+  default     = null
+}
+
+variable "gke_node_machine_type" {
+  description = "Machine type for the GKE Standard node pool. Ignored by shared and Autopilot modes."
+  type        = string
+  default     = "e2-standard-4"
+}
+
+variable "gke_node_count" {
+  description = "Initial and per-zone node count for GKE Standard."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = floor(var.gke_node_count) == var.gke_node_count && var.gke_node_count >= 1 && var.gke_node_count <= 100
+    error_message = "gke_node_count must be a whole number between 1 and 100."
+  }
+}
+
+variable "gke_node_disk_size_gb" {
+  description = "Boot disk size for GKE Standard nodes."
+  type        = number
+  default     = 100
+
+  validation {
+    condition     = floor(var.gke_node_disk_size_gb) == var.gke_node_disk_size_gb && var.gke_node_disk_size_gb >= 30 && var.gke_node_disk_size_gb <= 65536
+    error_message = "gke_node_disk_size_gb must be a whole number between 30 and 65536."
+  }
+}
+
+variable "gke_node_service_account" {
+  description = "Optional least-privilege service account for GKE Standard nodes."
+  type        = string
+  default     = null
+}
+
+variable "gke_postgresql_host" {
+  description = "Optional PostgreSQL host reachable from GKE. Defaults to the Cloud SQL private IP; set this for shared-cluster network routing or a customer-managed proxy."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.gke_postgresql_host == null || can(regex("^[A-Za-z0-9._:-]+$", var.gke_postgresql_host))
+    error_message = "gke_postgresql_host must be a hostname, IPv4 address, or IPv6 address without a URL scheme or path."
+  }
+}
+
+variable "gke_namespace" {
+  description = "Kubernetes namespace for the OpsRabbit Helm release."
+  type        = string
+  default     = "opsrabbit"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.gke_namespace)) && length(var.gke_namespace) <= 63
+    error_message = "gke_namespace must be a valid Kubernetes DNS label of at most 63 characters."
+  }
+}
+
+variable "gke_helm_repository" {
+  description = "Helm repository containing the OpsRabbit chart."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = (var.gke_deployment_mode == "disabled" && var.gke_helm_repository == null) || (var.gke_helm_repository != null && can(regex("^https://[^ ]+$", var.gke_helm_repository)))
+    error_message = "gke_helm_repository must be an HTTPS URL when GKE is enabled."
+  }
+}
+
+variable "gke_helm_chart" {
+  description = "OpsRabbit Helm chart name or OCI chart reference."
+  type        = string
+  default     = "opsrabbit"
+}
+
+variable "gke_helm_chart_version" {
+  description = "Immutable OpsRabbit Helm chart version. Required when GKE is enabled."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = (var.gke_deployment_mode == "disabled" && var.gke_helm_chart_version == null) || (var.gke_helm_chart_version != null && can(regex("^[A-Za-z0-9][A-Za-z0-9.+_-]*$", var.gke_helm_chart_version)))
+    error_message = "gke_helm_chart_version must be set to a non-empty chart version when GKE is enabled."
+  }
+}
+
+variable "gke_helm_values" {
+  description = "Additional non-secret Helm values for the OpsRabbit release. Do not put credentials in this map."
+  type        = map(string)
+  default     = {}
+}
