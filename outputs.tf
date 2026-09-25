@@ -23,7 +23,7 @@ output "filestore_share_name" {
 }
 
 output "filestore_init_job_name" {
-  value = google_cloud_run_v2_job.filestore_init.name
+  value = var.deployment_mode == "cloud_run" ? google_cloud_run_v2_job.filestore_init[0].name : null
 }
 
 output "project_id" {
@@ -31,7 +31,7 @@ output "project_id" {
 }
 
 output "opsrabbit_url" {
-  value = var.application_enabled ? (var.network_mode == "private" ? var.application_origin : google_cloud_run_v2_service.opsrabbit[0].uri) : null
+  value = local.cloud_run_enabled ? (var.network_mode == "private" ? var.application_origin : google_cloud_run_v2_service.opsrabbit[0].uri) : null
 }
 
 output "private_load_balancer_ip" {
@@ -40,7 +40,7 @@ output "private_load_balancer_ip" {
 }
 
 output "cloud_run_service_name" {
-  value = var.application_enabled ? google_cloud_run_v2_service.opsrabbit[0].name : null
+  value = local.cloud_run_enabled ? google_cloud_run_v2_service.opsrabbit[0].name : null
 }
 
 output "filestore_backup_workflow" {
@@ -49,4 +49,19 @@ output "filestore_backup_workflow" {
 
 output "region" {
   value = var.region
+}
+
+output "gke_cluster_name" {
+  description = "GKE cluster used by the Helm deployment, or null when GKE is disabled."
+  value       = local.gke_enabled ? local.gke_cluster_name : null
+}
+
+output "gke_cluster_self_link" {
+  description = "GKE cluster self-link, or null when GKE is disabled."
+  value       = local.gke_enabled ? local.gke_cluster_self_link : null
+}
+
+output "gke_helm_release_name" {
+  description = "OpsRabbit Helm release name, or null when GKE is disabled."
+  value       = local.gke_enabled ? helm_release.opsrabbit[0].name : null
 }

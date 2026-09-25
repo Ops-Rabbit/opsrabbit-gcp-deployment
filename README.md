@@ -10,7 +10,7 @@ Terraform for deploying OpsRabbit on Google Cloud.
 | Pull identity | Service account + `roles/artifactregistry.reader` |
 | Persistent storage | Filestore instance, four subdirectories mounted into Cloud Run as separate NFS volumes (`.opsrabbit`, `git`, `.agent-browser`, `.codex` under `/home/opsbot`) |
 | Database | Cloud SQL for PostgreSQL 16, with the `vector` extension |
-| Compute | Cloud Run v2 service running `web` (ingress), `backend`, and a private-IP Cloud SQL Auth Proxy |
+| Compute | Cloud Run v2 service running `web` (ingress), `backend`, and a private-IP Cloud SQL Auth Proxy; or optional GKE Standard, shared-cluster, and Autopilot deployment |
 | File backups | Daily Workflows + Cloud Scheduler backups; 14-day retention |
 | Secrets | Secret Manager (DB URL, `BETTER_AUTH_SECRET`, `OPSRABBIT_NODE_ENCRYPTION_KEY`) |
 | Networking | Dedicated VPC + subnet, Direct VPC egress from Cloud Run to Filestore |
@@ -29,6 +29,7 @@ Terraform for deploying OpsRabbit on Google Cloud.
 | `secrets.tf` | Secret Manager secrets |
 | `cloud-run.tf` | The Cloud Run v2 service |
 | `private-ingress.tf` | Optional internal HTTPS load balancer and source allowlist |
+| `gke.tf` | Optional GKE clusters, node pools, shared-cluster lookup, and Helm release |
 | `outputs.tf` | Deployment addresses and resource names |
 
 ## Helm deployment
@@ -214,6 +215,37 @@ Filestore, `BETTER_AUTH_SECRET`, the encryption key, or `network_mode`
 during a routine image upgrade.
 
 ## Private networking
+
+## GKE deployment modes
+
+Choose exactly one `deployment_mode`: `cloud_run`, `standard`, `autopilot`, or
+`shared`. Cloud Run is the default. The GKE values deploy the application
+through the OpsRabbit Helm chart and do not create Cloud Run resources:
+
+- `standard` creates a GKE Standard cluster and an auto-repairing,
+  auto-upgrading node pool. Use `gke_network_self_link` and
+  `gke_subnetwork_self_link` to place it in an existing VPC, or let it use the
+  module's VPC and subnet.
+- `autopilot` creates a GKE Autopilot cluster and lets GKE manage nodes.
+- `shared` looks up an existing cluster using the required
+  `gke_cluster_name` and `gke_cluster_location` values. Terraform does not
+  modify or delete that cluster.
+
+GKE uses the chart bundled at `charts/opsrabbit` by default, so the first
+deployment can use the local chart path without publishing a chart. To use an
+external chart, set `gke_helm_repository` to an HTTPS repository and provide a
+pinned `gke_helm_chart_version`. The chart receives immutable backend and web
+image references, the Workload Identity service account, runtime UID/GID, and
+the database/application secrets through Helm values.
+Standard mode provisions a dedicated node service account with only Artifact
+Registry pull access when `gke_node_service_account` is not supplied. Shared
+and Autopilot modes use the cluster's existing node identity configuration.
+GKE connects to Cloud SQL over its private IP with TLS; set
+`gke_postgresql_host` when a shared cluster reaches the database through a
+customer-managed hostname or proxy. Ensure the selected cluster network can
+route to the Cloud SQL private service access range.
+Keep Terraform state in an encrypted, access-controlled GCS backend. The
+`gke_helm_values` map is intentionally for non-secret overrides only.
 
 For VPN-only access, use [`private.tfvars.example`](private.tfvars.example). Private mode provisions an
 internal HTTPS load balancer and source allowlist while disabling direct

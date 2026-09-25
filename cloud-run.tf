@@ -1,6 +1,6 @@
 resource "google_cloud_run_v2_service" "opsrabbit" {
   provider = google-beta
-  count    = var.application_enabled ? 1 : 0
+  count    = local.cloud_run_enabled ? 1 : 0
 
   project              = var.project_id
   name                 = "${var.name_prefix}-app"
@@ -297,7 +297,7 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
 }
 
 resource "google_cloud_run_v2_service_iam_member" "public" {
-  count = var.application_enabled && var.network_mode == "public" && var.allow_unauthenticated ? 1 : 0
+  count = local.cloud_run_enabled && var.network_mode == "public" && var.allow_unauthenticated ? 1 : 0
 
   project  = var.project_id
   location = var.region
