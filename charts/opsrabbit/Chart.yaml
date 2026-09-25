@@ -1,0 +1,12 @@
+apiVersion: v2
+name: opsrabbit
+description: OpsRabbit web and backend workloads for Kubernetes and GKE
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - opsrabbit
+  - gke
+  - kubernetes
+maintainers:
+  - name: OpsRabbit

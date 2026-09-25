@@ -30,6 +30,19 @@ Terraform for deploying OpsRabbit on Google Cloud.
 | `cloud-run.tf` | The Cloud Run v2 service |
 | `private-ingress.tf` | Optional internal HTTPS load balancer and source allowlist |
 | `outputs.tf` | Deployment addresses and resource names |
+
+## Helm deployment
+
+The reusable OpsRabbit chart is in [`charts/opsrabbit`](charts/opsrabbit). It
+deploys separate web and backend workloads, ClusterIP Services, optional
+Ingress, a configurable PVC, probes, Secret references, and hardened pod and
+container security defaults. See the chart README for installation and values.
+
+Run the chart checks locally with:
+
+```bash
+make helm-test
+```
 | `terraform.tfvars.example` | Secret-free example input |
 
 ## Prerequisites

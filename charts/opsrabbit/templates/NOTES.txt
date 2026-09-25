@@ -1,0 +1,11 @@
+OpsRabbit has been installed in namespace {{ .Release.Namespace }}.
+
+Web service:
+  kubectl -n {{ .Release.Namespace }} get svc {{ include "opsrabbit.fullname" . }}-web
+
+Backend service:
+  kubectl -n {{ .Release.Namespace }} get svc {{ include "opsrabbit.fullname" . }}-backend
+
+For production, use an existing Kubernetes Secret via
+`secrets.existingSecret` or provide secret values through an access-controlled
+values file. Do not commit credentials to a values file.

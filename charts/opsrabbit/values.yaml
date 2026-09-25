@@ -1,0 +1,111 @@
+replicaCount:
+  backend: 1
+  web: 1
+
+image:
+  backend: ""
+  web: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: false
+  gkeWorkloadIdentity:
+    projectId: ""
+    gcpServiceAccount: ""
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  backend:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  web:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+backend:
+  containerPort: 8384
+  servicePort: 8384
+  imagePullPolicy: ""
+  env: {}
+  command: []
+  args: []
+
+web:
+  containerPort: 8080
+  servicePort: 80
+  imagePullPolicy: ""
+  env: {}
+  command: []
+  args: []
+
+service:
+  type: ClusterIP
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: opsrabbit.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+secrets:
+  existingSecret: ""
+  databaseUrl: ""
+  betterAuthSecret: ""
+  encryptionKey: ""
+  databaseUrlKey: DATABASE_URL
+  betterAuthSecretKey: BETTER_AUTH_SECRET
+  encryptionKeyKey: OPSRABBIT_NODE_ENCRYPTION_KEY
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 100Gi
+  mountPath: /home/opsbot
+  subdirectories:
+    - .opsrabbit
+    - git
+    - .agent-browser
+    - .codex
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
