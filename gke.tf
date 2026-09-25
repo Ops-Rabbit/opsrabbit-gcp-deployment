@@ -1,8 +1,9 @@
 locals {
-  gke_cluster_name     = coalesce(var.gke_cluster_name, "${var.name_prefix}-gke")
-  gke_cluster_location = coalesce(var.gke_cluster_location, var.region)
-  gke_network          = coalesce(var.gke_network_self_link, local.vpc_self_link)
-  gke_subnetwork       = coalesce(var.gke_subnetwork_self_link, local.subnet_self_link)
+  gke_cluster_name      = coalesce(var.gke_cluster_name, "${var.name_prefix}-gke")
+  gke_cluster_location  = coalesce(var.gke_cluster_location, var.region)
+  gke_network           = coalesce(var.gke_network_self_link, local.vpc_self_link)
+  gke_subnetwork        = coalesce(var.gke_subnetwork_self_link, local.subnet_self_link)
+  gke_helm_chart_source = var.gke_helm_repository == null ? "${path.module}/charts/opsrabbit" : var.gke_helm_chart
 }
 
 data "google_container_cluster" "shared" {
@@ -119,8 +120,8 @@ resource "helm_release" "opsrabbit" {
   namespace        = var.gke_namespace
   create_namespace = true
   repository       = var.gke_helm_repository
-  chart            = var.gke_helm_chart
-  version          = var.gke_helm_chart_version
+  chart            = local.gke_helm_chart_source
+  version          = var.gke_helm_repository == null ? null : var.gke_helm_chart_version
   atomic           = true
   cleanup_on_fail  = true
   wait             = true
@@ -140,6 +141,26 @@ resource "helm_release" "opsrabbit" {
   set {
     name  = "serviceAccount.gkeWorkloadIdentity.projectId"
     value = var.project_id
+  }
+
+  set {
+    name  = "serviceAccount.gkeWorkloadIdentity.gcpServiceAccount"
+    value = google_service_account.run_sa.account_id
+  }
+
+  set {
+    name  = "podSecurityContext.runAsUser"
+    value = tostring(var.backend_uid)
+  }
+
+  set {
+    name  = "podSecurityContext.runAsGroup"
+    value = tostring(var.backend_gid)
+  }
+
+  set {
+    name  = "podSecurityContext.fsGroup"
+    value = tostring(var.backend_gid)
   }
 
   set_sensitive {

@@ -452,30 +452,30 @@ variable "gke_namespace" {
 }
 
 variable "gke_helm_repository" {
-  description = "Helm repository containing the OpsRabbit chart."
+  description = "Optional HTTPS Helm repository containing the OpsRabbit chart. When null, use the chart bundled at charts/opsrabbit."
   type        = string
   default     = null
 
   validation {
-    condition     = (var.gke_deployment_mode == "disabled" && var.gke_helm_repository == null) || (var.gke_helm_repository != null && can(regex("^https://[^ ]+$", var.gke_helm_repository)))
-    error_message = "gke_helm_repository must be an HTTPS URL when GKE is enabled."
+    condition     = var.gke_helm_repository == null || can(regex("^https://[^ ]+$", var.gke_helm_repository))
+    error_message = "gke_helm_repository must be null for the bundled chart or an HTTPS URL for an external chart."
   }
 }
 
 variable "gke_helm_chart" {
-  description = "OpsRabbit Helm chart name or OCI chart reference."
+  description = "OpsRabbit Helm chart name for an external repository; ignored when gke_helm_repository is null."
   type        = string
   default     = "opsrabbit"
 }
 
 variable "gke_helm_chart_version" {
-  description = "Immutable OpsRabbit Helm chart version. Required when GKE is enabled."
+  description = "Immutable OpsRabbit Helm chart version. Required for an external repository; not used for the bundled local chart."
   type        = string
   default     = null
 
   validation {
-    condition     = (var.gke_deployment_mode == "disabled" && var.gke_helm_chart_version == null) || (var.gke_helm_chart_version != null && can(regex("^[A-Za-z0-9][A-Za-z0-9.+_-]*$", var.gke_helm_chart_version)))
-    error_message = "gke_helm_chart_version must be set to a non-empty chart version when GKE is enabled."
+    condition     = var.gke_helm_repository == null || (var.gke_helm_chart_version != null && can(regex("^[A-Za-z0-9][A-Za-z0-9.+_-]*$", var.gke_helm_chart_version)))
+    error_message = "gke_helm_chart_version must be set to a non-empty version when an external Helm repository is configured."
   }
 }
 

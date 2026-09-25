@@ -27,9 +27,7 @@ run "standard_creates_cluster_and_node_pool" {
   command = plan
 
   variables {
-    gke_deployment_mode    = "standard"
-    gke_helm_repository    = "https://charts.example.com"
-    gke_helm_chart_version = "1.2.3"
+    gke_deployment_mode = "standard"
   }
 
   assert {
@@ -39,7 +37,12 @@ run "standard_creates_cluster_and_node_pool" {
 
   assert {
     condition     = length(helm_release.opsrabbit) == 1 && helm_release.opsrabbit[0].namespace == "opsrabbit"
-    error_message = "Standard mode must install the pinned OpsRabbit Helm release into the configured namespace."
+    error_message = "Standard mode must install the OpsRabbit Helm release into the configured namespace."
+  }
+
+  assert {
+    condition     = endswith(helm_release.opsrabbit[0].chart, "/charts/opsrabbit")
+    error_message = "GKE must use the bundled OpsRabbit chart by default."
   }
 }
 
@@ -47,9 +50,7 @@ run "autopilot_does_not_create_node_pool" {
   command = plan
 
   variables {
-    gke_deployment_mode    = "autopilot"
-    gke_helm_repository    = "https://charts.example.com"
-    gke_helm_chart_version = "1.2.3"
+    gke_deployment_mode = "autopilot"
   }
 
   assert {
@@ -62,15 +63,13 @@ run "shared_requires_explicit_cluster_identity" {
   command = plan
 
   variables {
-    gke_deployment_mode    = "shared"
-    gke_helm_repository    = "https://charts.example.com"
-    gke_helm_chart_version = "1.2.3"
+    gke_deployment_mode = "shared"
   }
 
   expect_failures = [var.gke_cluster_name, var.gke_cluster_location]
 }
 
-run "rejects_unpinned_gke_chart" {
+run "rejects_unpinned_external_gke_chart" {
   command = plan
 
   variables {

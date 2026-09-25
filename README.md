@@ -230,9 +230,12 @@ deploy the application through the OpsRabbit Helm chart:
   `gke_cluster_name` and `gke_cluster_location` values. Terraform does not
   modify or delete that cluster.
 
-All enabled GKE modes require an HTTPS `gke_helm_repository` and pinned
-`gke_helm_chart_version`. The chart receives immutable backend and web image
-references and the database/application secrets through sensitive Helm values.
+GKE uses the chart bundled at `charts/opsrabbit` by default, so the first
+deployment can use the local chart path without publishing a chart. To use an
+external chart, set `gke_helm_repository` to an HTTPS repository and provide a
+pinned `gke_helm_chart_version`. The chart receives immutable backend and web
+image references, the Workload Identity service account, runtime UID/GID, and
+the database/application secrets through Helm values.
 GKE connects to Cloud SQL over its private IP with TLS; set
 `gke_postgresql_host` when a shared cluster reaches the database through a
 customer-managed hostname or proxy. Ensure the selected cluster network can
