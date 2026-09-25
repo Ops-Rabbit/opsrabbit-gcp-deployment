@@ -6,12 +6,12 @@ metadata:
   labels:
     {{- include "opsrabbit.labels" . | nindent 4 }}
     app.kubernetes.io/component: backend
-spec:
-  type: {{ .Values.service.type }}
   {{- with .Values.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+spec:
+  type: {{ .Values.service.type }}
   ports:
     - name: http
       port: {{ .Values.backend.servicePort }}
@@ -29,12 +29,12 @@ metadata:
   labels:
     {{- include "opsrabbit.labels" . | nindent 4 }}
     app.kubernetes.io/component: web
-spec:
-  type: {{ .Values.service.type }}
   {{- with .Values.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+spec:
+  type: {{ .Values.service.type }}
   ports:
     - name: http
       port: {{ .Values.web.servicePort }}

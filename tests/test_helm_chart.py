@@ -33,6 +33,16 @@ class HelmChartTests(unittest.TestCase):
             raise AssertionError(result.stderr)
         cls.rendered = result.stdout
 
+    def render(self, *extra_values):
+        result = subprocess.run(
+            [HELM, "template", "opsrabbit", str(CHART), "--namespace", "opsrabbit", *self.values, *extra_values],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
     def test_rendered_workloads_and_services(self):
         self.assertEqual(self.rendered.count("kind: Deployment\n"), 2)
         self.assertEqual(self.rendered.count("kind: Service\n"), 2)
@@ -52,6 +62,25 @@ class HelmChartTests(unittest.TestCase):
         self.assertIn("key: DATABASE_URL", self.rendered)
         self.assertIn("key: BETTER_AUTH_SECRET", self.rendered)
         self.assertIn("key: OPSRABBIT_NODE_ENCRYPTION_KEY", self.rendered)
+
+    def test_inline_secret_values_create_a_secret(self):
+        rendered = self.render(
+            "--set",
+            "secrets.existingSecret=",
+            "--set",
+            "secrets.databaseUrl=postgresql://db",
+            "--set",
+            "secrets.betterAuthSecret=test-auth",
+            "--set",
+            "secrets.encryptionKey=test-encryption",
+        )
+        self.assertIn("kind: Secret\n", rendered)
+        self.assertIn("DATABASE_URL: \"postgresql://db\"", rendered)
+
+    def test_service_annotations_are_metadata_annotations(self):
+        rendered = self.render("--set", "service.annotations.test=ok")
+        self.assertEqual(rendered.count("test: ok"), 2)
+        self.assertNotIn("spec:\n  type: ClusterIP\n  annotations:", rendered)
 
     def test_images_are_required(self):
         result = subprocess.run(
