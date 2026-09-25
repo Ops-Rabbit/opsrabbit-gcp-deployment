@@ -236,6 +236,9 @@ external chart, set `gke_helm_repository` to an HTTPS repository and provide a
 pinned `gke_helm_chart_version`. The chart receives immutable backend and web
 image references, the Workload Identity service account, runtime UID/GID, and
 the database/application secrets through Helm values.
+Standard mode provisions a dedicated node service account with only Artifact
+Registry pull access when `gke_node_service_account` is not supplied. Shared
+and Autopilot modes use the cluster's existing node identity configuration.
 GKE connects to Cloud SQL over its private IP with TLS; set
 `gke_postgresql_host` when a shared cluster reaches the database through a
 customer-managed hostname or proxy. Ensure the selected cluster network can

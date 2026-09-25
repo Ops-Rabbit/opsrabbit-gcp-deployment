@@ -1,9 +1,38 @@
 locals {
-  gke_cluster_name      = coalesce(var.gke_cluster_name, "${var.name_prefix}-gke")
-  gke_cluster_location  = coalesce(var.gke_cluster_location, var.region)
-  gke_network           = coalesce(var.gke_network_self_link, local.vpc_self_link)
-  gke_subnetwork        = coalesce(var.gke_subnetwork_self_link, local.subnet_self_link)
-  gke_helm_chart_source = var.gke_helm_repository == null ? "${path.module}/charts/opsrabbit" : var.gke_helm_chart
+  gke_cluster_name         = coalesce(var.gke_cluster_name, "${var.name_prefix}-gke")
+  gke_cluster_location     = coalesce(var.gke_cluster_location, var.region)
+  gke_network              = coalesce(var.gke_network_self_link, local.vpc_self_link)
+  gke_subnetwork           = coalesce(var.gke_subnetwork_self_link, local.subnet_self_link)
+  gke_helm_chart_source    = var.gke_helm_repository == null ? "${path.module}/charts/opsrabbit" : var.gke_helm_chart
+  gke_node_service_account = var.gke_node_service_account != null ? var.gke_node_service_account : try(google_service_account.gke_node[0].email, null)
+  gke_ksa_name             = trimsuffix(substr("${local.gke_cluster_name}-${var.gke_namespace}-opsrabbit", 0, 63), "-")
+}
+
+resource "google_service_account" "gke_node" {
+  count = var.gke_deployment_mode == "standard" && var.gke_node_service_account == null ? 1 : 0
+
+  project      = var.project_id
+  account_id   = "${var.name_prefix}-gke-node"
+  display_name = "OpsRabbit GKE node image-pull identity"
+
+  depends_on = [google_project_service.required]
+}
+
+resource "google_artifact_registry_repository_iam_member" "gke_node_pull" {
+  count = var.gke_deployment_mode == "standard" && var.gke_node_service_account == null ? 1 : 0
+
+  location   = google_artifact_registry_repository.opsrabbit.location
+  repository = google_artifact_registry_repository.opsrabbit.repository_id
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${google_service_account.gke_node[0].email}"
+}
+
+resource "google_service_account_iam_member" "gke_workload_identity" {
+  count = local.gke_enabled ? 1 : 0
+
+  service_account_id = google_service_account.run_sa.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.gke_namespace}/${local.gke_ksa_name}]"
 }
 
 data "google_container_cluster" "shared" {
@@ -82,7 +111,7 @@ resource "google_container_node_pool" "opsrabbit" {
     machine_type    = var.gke_node_machine_type
     disk_size_gb    = var.gke_node_disk_size_gb
     disk_type       = "pd-balanced"
-    service_account = var.gke_node_service_account
+    service_account = local.gke_node_service_account
     oauth_scopes = [
       "https://www.googleapis.com/auth/logging.write",
       "https://www.googleapis.com/auth/monitoring",
@@ -110,7 +139,7 @@ resource "google_container_node_pool" "opsrabbit" {
     auto_upgrade = true
   }
 
-  depends_on = [google_container_cluster.opsrabbit]
+  depends_on = [google_container_cluster.opsrabbit, google_artifact_registry_repository_iam_member.gke_node_pull]
 }
 
 resource "helm_release" "opsrabbit" {
@@ -178,5 +207,5 @@ resource "helm_release" "opsrabbit" {
     value = var.opsrabbit_encryption_key
   }
 
-  depends_on = [google_container_node_pool.opsrabbit, data.google_container_cluster.shared]
+  depends_on = [google_container_node_pool.opsrabbit, data.google_container_cluster.shared, google_service_account_iam_member.gke_workload_identity]
 }

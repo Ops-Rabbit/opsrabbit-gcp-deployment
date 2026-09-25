@@ -36,6 +36,11 @@ run "standard_creates_cluster_and_node_pool" {
   }
 
   assert {
+    condition     = length(google_service_account.gke_node) == 1 && length(google_artifact_registry_repository_iam_member.gke_node_pull) == 1
+    error_message = "Standard mode must provision a least-privilege node identity for private image pulls by default."
+  }
+
+  assert {
     condition     = length(helm_release.opsrabbit) == 1 && helm_release.opsrabbit[0].namespace == "opsrabbit"
     error_message = "Standard mode must install the OpsRabbit Helm release into the configured namespace."
   }
