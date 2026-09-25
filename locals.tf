@@ -18,8 +18,9 @@ locals {
 
   filestore_ip_address = google_filestore_instance.opsrabbit.networks[0].ip_addresses[0]
 
-  gke_enabled                = var.gke_deployment_mode != "disabled"
-  gke_cluster_endpoint       = var.gke_deployment_mode == "shared" ? try(data.google_container_cluster.shared[0].endpoint, null) : var.gke_deployment_mode == "autopilot" ? try(google_container_cluster.autopilot[0].endpoint, null) : try(google_container_cluster.opsrabbit[0].endpoint, null)
-  gke_cluster_ca_certificate = var.gke_deployment_mode == "shared" ? try(data.google_container_cluster.shared[0].master_auth[0].cluster_ca_certificate, null) : var.gke_deployment_mode == "autopilot" ? try(google_container_cluster.autopilot[0].master_auth[0].cluster_ca_certificate, null) : try(google_container_cluster.opsrabbit[0].master_auth[0].cluster_ca_certificate, null)
-  gke_cluster_self_link      = var.gke_deployment_mode == "shared" ? try(data.google_container_cluster.shared[0].self_link, null) : var.gke_deployment_mode == "autopilot" ? try(google_container_cluster.autopilot[0].self_link, null) : try(google_container_cluster.opsrabbit[0].self_link, null)
+  cloud_run_enabled          = var.deployment_mode == "cloud_run" && var.application_enabled
+  gke_enabled                = var.deployment_mode != "cloud_run"
+  gke_cluster_endpoint       = var.deployment_mode == "shared" ? try(data.google_container_cluster.shared[0].endpoint, null) : var.deployment_mode == "autopilot" ? try(google_container_cluster.autopilot[0].endpoint, null) : try(google_container_cluster.opsrabbit[0].endpoint, null)
+  gke_cluster_ca_certificate = var.deployment_mode == "shared" ? try(data.google_container_cluster.shared[0].master_auth[0].cluster_ca_certificate, null) : var.deployment_mode == "autopilot" ? try(google_container_cluster.autopilot[0].master_auth[0].cluster_ca_certificate, null) : try(google_container_cluster.opsrabbit[0].master_auth[0].cluster_ca_certificate, null)
+  gke_cluster_self_link      = var.deployment_mode == "shared" ? try(data.google_container_cluster.shared[0].self_link, null) : var.deployment_mode == "autopilot" ? try(google_container_cluster.autopilot[0].self_link, null) : try(google_container_cluster.opsrabbit[0].self_link, null)
 }

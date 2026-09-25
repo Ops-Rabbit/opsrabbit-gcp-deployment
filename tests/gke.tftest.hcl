@@ -27,12 +27,17 @@ run "standard_creates_cluster_and_node_pool" {
   command = plan
 
   variables {
-    gke_deployment_mode = "standard"
+    deployment_mode = "standard"
   }
 
   assert {
     condition     = length(google_container_cluster.opsrabbit) == 1 && length(google_container_node_pool.opsrabbit) == 1
     error_message = "Standard mode must create a non-Autopilot cluster and managed node pool."
+  }
+
+  assert {
+    condition     = length(google_cloud_run_v2_service.opsrabbit) == 0
+    error_message = "A GKE deployment target must not create a Cloud Run service."
   }
 
   assert {
@@ -60,7 +65,7 @@ run "autopilot_does_not_create_node_pool" {
   command = plan
 
   variables {
-    gke_deployment_mode = "autopilot"
+    deployment_mode = "autopilot"
   }
 
   assert {
@@ -83,7 +88,7 @@ run "shared_requires_explicit_cluster_identity" {
   command = plan
 
   variables {
-    gke_deployment_mode = "shared"
+    deployment_mode = "shared"
   }
 
   expect_failures = [var.gke_cluster_name, var.gke_cluster_location]
@@ -93,7 +98,7 @@ run "rejects_unpinned_external_gke_chart" {
   command = plan
 
   variables {
-    gke_deployment_mode = "standard"
+    deployment_mode     = "standard"
     gke_helm_repository = "https://charts.example.com"
   }
 
@@ -104,7 +109,7 @@ run "accepts_shared_cluster_database_host_override" {
   command = plan
 
   variables {
-    gke_deployment_mode    = "standard"
+    deployment_mode        = "standard"
     gke_helm_repository    = "https://charts.example.com"
     gke_helm_chart_version = "1.2.3"
     gke_postgresql_host    = "postgres.internal.example.com"

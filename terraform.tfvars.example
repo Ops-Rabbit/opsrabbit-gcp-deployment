@@ -2,6 +2,9 @@ project_id  = "my-gcp-project"
 region      = "us-central1"
 name_prefix = "opsrabbit"
 
+# Choose exactly one deployment target: cloud_run, standard, autopilot, or shared.
+deployment_mode = "cloud_run"
+
 # ---- Networking ----
 # A VPC is always created/used now (Filestore has no public-IP mode), and
 # Cloud SQL is always private IP only as a result. Terraform itself never

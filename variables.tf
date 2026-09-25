@@ -346,19 +346,19 @@ variable "filestore_backup_retention_days" {
 # GKE deployment modes
 # ---------------------------------------------------------------------------
 
-variable "gke_deployment_mode" {
-  description = "Optional GKE deployment mode. Cloud Run remains the default; standard and autopilot create a cluster, while shared attaches to an existing cluster."
+variable "deployment_mode" {
+  description = "The single application deployment target: Cloud Run, a new GKE Standard or Autopilot cluster, or an existing shared GKE cluster."
   type        = string
-  default     = "disabled"
+  default     = "cloud_run"
 
   validation {
-    condition     = contains(["disabled", "standard", "shared", "autopilot"], var.gke_deployment_mode)
-    error_message = "gke_deployment_mode must be disabled, standard, shared, or autopilot."
+    condition     = contains(["cloud_run", "standard", "shared", "autopilot"], var.deployment_mode)
+    error_message = "deployment_mode must be cloud_run, standard, shared, or autopilot."
   }
 }
 
 variable "gke_cluster_name" {
-  description = "GKE cluster name to create, or existing cluster name when gke_deployment_mode is shared."
+  description = "GKE cluster name to create, or existing cluster name when deployment_mode is shared. Ignored for cloud_run."
   type        = string
   default     = null
 
@@ -367,19 +367,19 @@ variable "gke_cluster_name" {
     error_message = "gke_cluster_name must contain only lowercase letters, numbers, and hyphens, and start with a letter."
   }
   validation {
-    condition     = var.gke_deployment_mode != "shared" || var.gke_cluster_name != null
-    error_message = "gke_cluster_name is required when gke_deployment_mode is shared."
+    condition     = var.deployment_mode != "shared" || var.gke_cluster_name != null
+    error_message = "gke_cluster_name is required when deployment_mode is shared."
   }
 }
 
 variable "gke_cluster_location" {
-  description = "GKE cluster region or zone. Regional clusters are recommended for production Standard deployments."
+  description = "GKE cluster region or zone. Regional clusters are recommended for production Standard deployments; ignored for cloud_run."
   type        = string
   default     = null
 
   validation {
-    condition     = var.gke_deployment_mode != "shared" || var.gke_cluster_location != null
-    error_message = "gke_cluster_location is required when gke_deployment_mode is shared."
+    condition     = var.deployment_mode != "shared" || var.gke_cluster_location != null
+    error_message = "gke_cluster_location is required when deployment_mode is shared."
   }
 }
 

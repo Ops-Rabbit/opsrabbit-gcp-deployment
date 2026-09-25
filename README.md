@@ -218,8 +218,9 @@ during a routine image upgrade.
 
 ## GKE deployment modes
 
-Cloud Run is the default. Set `gke_deployment_mode` to one of the following to
-deploy the application through the OpsRabbit Helm chart:
+Choose exactly one `deployment_mode`: `cloud_run`, `standard`, `autopilot`, or
+`shared`. Cloud Run is the default. The GKE values deploy the application
+through the OpsRabbit Helm chart and do not create Cloud Run resources:
 
 - `standard` creates a GKE Standard cluster and an auto-repairing,
   auto-upgrading node pool. Use `gke_network_self_link` and

@@ -9,12 +9,12 @@ locals {
 }
 
 data "google_compute_default_service_account" "default" {
-  count   = var.gke_deployment_mode == "autopilot" ? 1 : 0
+  count   = var.deployment_mode == "autopilot" ? 1 : 0
   project = var.project_id
 }
 
 resource "google_service_account" "gke_node" {
-  count = var.gke_deployment_mode == "standard" && var.gke_node_service_account == null ? 1 : 0
+  count = var.deployment_mode == "standard" && var.gke_node_service_account == null ? 1 : 0
 
   project      = var.project_id
   account_id   = "${var.name_prefix}-gke-node"
@@ -24,7 +24,7 @@ resource "google_service_account" "gke_node" {
 }
 
 resource "google_artifact_registry_repository_iam_member" "gke_node_pull" {
-  count = var.gke_deployment_mode == "standard" && var.gke_node_service_account == null ? 1 : 0
+  count = var.deployment_mode == "standard" && var.gke_node_service_account == null ? 1 : 0
 
   location   = google_artifact_registry_repository.opsrabbit.location
   repository = google_artifact_registry_repository.opsrabbit.repository_id
@@ -33,7 +33,7 @@ resource "google_artifact_registry_repository_iam_member" "gke_node_pull" {
 }
 
 resource "google_project_iam_member" "gke_node_default_role" {
-  count = var.gke_deployment_mode == "standard" && var.gke_node_service_account == null ? 1 : 0
+  count = var.deployment_mode == "standard" && var.gke_node_service_account == null ? 1 : 0
 
   project = var.project_id
   role    = "roles/container.defaultNodeServiceAccount"
@@ -41,7 +41,7 @@ resource "google_project_iam_member" "gke_node_default_role" {
 }
 
 resource "google_artifact_registry_repository_iam_member" "gke_autopilot_pull" {
-  count = var.gke_deployment_mode == "autopilot" ? 1 : 0
+  count = var.deployment_mode == "autopilot" ? 1 : 0
 
   location   = google_artifact_registry_repository.opsrabbit.location
   repository = google_artifact_registry_repository.opsrabbit.repository_id
@@ -50,7 +50,7 @@ resource "google_artifact_registry_repository_iam_member" "gke_autopilot_pull" {
 }
 
 resource "google_project_iam_member" "gke_autopilot_default_role" {
-  count = var.gke_deployment_mode == "autopilot" ? 1 : 0
+  count = var.deployment_mode == "autopilot" ? 1 : 0
 
   project = var.project_id
   role    = "roles/container.defaultNodeServiceAccount"
@@ -66,14 +66,14 @@ resource "google_service_account_iam_member" "gke_workload_identity" {
 }
 
 data "google_container_cluster" "shared" {
-  count    = var.gke_deployment_mode == "shared" ? 1 : 0
+  count    = var.deployment_mode == "shared" ? 1 : 0
   project  = var.project_id
   name     = local.gke_cluster_name
   location = local.gke_cluster_location
 }
 
 resource "google_container_cluster" "opsrabbit" {
-  count = var.gke_deployment_mode == "standard" ? 1 : 0
+  count = var.deployment_mode == "standard" ? 1 : 0
 
   project  = var.project_id
   name     = local.gke_cluster_name
@@ -104,7 +104,7 @@ resource "google_container_cluster" "opsrabbit" {
 }
 
 resource "google_container_cluster" "autopilot" {
-  count = var.gke_deployment_mode == "autopilot" ? 1 : 0
+  count = var.deployment_mode == "autopilot" ? 1 : 0
 
   project  = var.project_id
   name     = local.gke_cluster_name
@@ -128,7 +128,7 @@ resource "google_container_cluster" "autopilot" {
 }
 
 resource "google_container_node_pool" "opsrabbit" {
-  count = var.gke_deployment_mode == "standard" ? 1 : 0
+  count = var.deployment_mode == "standard" ? 1 : 0
 
   project  = var.project_id
   name     = "${local.gke_cluster_name}-nodes"

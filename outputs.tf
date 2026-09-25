@@ -31,7 +31,7 @@ output "project_id" {
 }
 
 output "opsrabbit_url" {
-  value = var.application_enabled ? (var.network_mode == "private" ? var.application_origin : google_cloud_run_v2_service.opsrabbit[0].uri) : null
+  value = local.cloud_run_enabled ? (var.network_mode == "private" ? var.application_origin : google_cloud_run_v2_service.opsrabbit[0].uri) : null
 }
 
 output "private_load_balancer_ip" {
@@ -40,7 +40,7 @@ output "private_load_balancer_ip" {
 }
 
 output "cloud_run_service_name" {
-  value = var.application_enabled ? google_cloud_run_v2_service.opsrabbit[0].name : null
+  value = local.cloud_run_enabled ? google_cloud_run_v2_service.opsrabbit[0].name : null
 }
 
 output "filestore_backup_workflow" {
