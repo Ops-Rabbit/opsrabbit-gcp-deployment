@@ -23,7 +23,7 @@ output "filestore_share_name" {
 }
 
 output "filestore_init_job_name" {
-  value = google_cloud_run_v2_job.filestore_init.name
+  value = var.deployment_mode == "cloud_run" ? google_cloud_run_v2_job.filestore_init[0].name : null
 }
 
 output "project_id" {

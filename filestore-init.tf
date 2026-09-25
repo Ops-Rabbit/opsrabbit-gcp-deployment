@@ -17,6 +17,8 @@
 #   gcloud run jobs execute opsrabbit-fs-init --project <project> --region <region> --wait
 
 resource "google_cloud_run_v2_job" "filestore_init" {
+  count = var.deployment_mode == "cloud_run" ? 1 : 0
+
   project  = var.project_id
   name     = "${var.name_prefix}-fs-init"
   location = var.region
