@@ -8,6 +8,11 @@ locals {
   gke_ksa_name             = trimsuffix(substr("${local.gke_cluster_name}-${var.gke_namespace}-opsrabbit", 0, 63), "-")
 }
 
+data "google_compute_default_service_account" "default" {
+  count   = var.gke_deployment_mode == "autopilot" ? 1 : 0
+  project = var.project_id
+}
+
 resource "google_service_account" "gke_node" {
   count = var.gke_deployment_mode == "standard" && var.gke_node_service_account == null ? 1 : 0
 
@@ -25,6 +30,23 @@ resource "google_artifact_registry_repository_iam_member" "gke_node_pull" {
   repository = google_artifact_registry_repository.opsrabbit.repository_id
   role       = "roles/artifactregistry.reader"
   member     = "serviceAccount:${google_service_account.gke_node[0].email}"
+}
+
+resource "google_project_iam_member" "gke_node_default_role" {
+  count = var.gke_deployment_mode == "standard" && var.gke_node_service_account == null ? 1 : 0
+
+  project = var.project_id
+  role    = "roles/container.defaultNodeServiceAccount"
+  member  = "serviceAccount:${google_service_account.gke_node[0].email}"
+}
+
+resource "google_artifact_registry_repository_iam_member" "gke_autopilot_pull" {
+  count = var.gke_deployment_mode == "autopilot" ? 1 : 0
+
+  location   = google_artifact_registry_repository.opsrabbit.location
+  repository = google_artifact_registry_repository.opsrabbit.repository_id
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${data.google_compute_default_service_account.default[0].email}"
 }
 
 resource "google_service_account_iam_member" "gke_workload_identity" {
@@ -139,7 +161,7 @@ resource "google_container_node_pool" "opsrabbit" {
     auto_upgrade = true
   }
 
-  depends_on = [google_container_cluster.opsrabbit, google_artifact_registry_repository_iam_member.gke_node_pull]
+  depends_on = [google_container_cluster.opsrabbit, google_artifact_registry_repository_iam_member.gke_node_pull, google_project_iam_member.gke_node_default_role]
 }
 
 resource "helm_release" "opsrabbit" {
@@ -207,5 +229,5 @@ resource "helm_release" "opsrabbit" {
     value = var.opsrabbit_encryption_key
   }
 
-  depends_on = [google_container_node_pool.opsrabbit, data.google_container_cluster.shared, google_service_account_iam_member.gke_workload_identity]
+  depends_on = [google_container_node_pool.opsrabbit, data.google_container_cluster.shared, google_service_account_iam_member.gke_workload_identity, google_artifact_registry_repository_iam_member.gke_autopilot_pull]
 }

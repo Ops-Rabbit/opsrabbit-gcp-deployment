@@ -41,6 +41,11 @@ run "standard_creates_cluster_and_node_pool" {
   }
 
   assert {
+    condition     = length(google_project_iam_member.gke_node_default_role) == 1
+    error_message = "Standard mode must grant the generated node identity GKE's baseline node role."
+  }
+
+  assert {
     condition     = length(helm_release.opsrabbit) == 1 && helm_release.opsrabbit[0].namespace == "opsrabbit"
     error_message = "Standard mode must install the OpsRabbit Helm release into the configured namespace."
   }
@@ -61,6 +66,11 @@ run "autopilot_does_not_create_node_pool" {
   assert {
     condition     = length(google_container_cluster.autopilot) == 1 && length(google_container_node_pool.opsrabbit) == 0
     error_message = "Autopilot mode must let GKE manage nodes instead of creating a node pool."
+  }
+
+  assert {
+    condition     = length(google_artifact_registry_repository_iam_member.gke_autopilot_pull) == 1
+    error_message = "Autopilot mode must authorize its default node identity to pull private images."
   }
 }
 
