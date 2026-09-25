@@ -72,6 +72,11 @@ run "autopilot_does_not_create_node_pool" {
     condition     = length(google_artifact_registry_repository_iam_member.gke_autopilot_pull) == 1
     error_message = "Autopilot mode must authorize its default node identity to pull private images."
   }
+
+  assert {
+    condition     = length(google_project_iam_member.gke_autopilot_default_role) == 1
+    error_message = "Autopilot mode must grant its default node identity GKE's baseline node role."
+  }
 }
 
 run "shared_requires_explicit_cluster_identity" {

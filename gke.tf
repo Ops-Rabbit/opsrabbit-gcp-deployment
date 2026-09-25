@@ -49,6 +49,14 @@ resource "google_artifact_registry_repository_iam_member" "gke_autopilot_pull" {
   member     = "serviceAccount:${data.google_compute_default_service_account.default[0].email}"
 }
 
+resource "google_project_iam_member" "gke_autopilot_default_role" {
+  count = var.gke_deployment_mode == "autopilot" ? 1 : 0
+
+  project = var.project_id
+  role    = "roles/container.defaultNodeServiceAccount"
+  member  = "serviceAccount:${data.google_compute_default_service_account.default[0].email}"
+}
+
 resource "google_service_account_iam_member" "gke_workload_identity" {
   count = local.gke_enabled ? 1 : 0
 
@@ -229,5 +237,5 @@ resource "helm_release" "opsrabbit" {
     value = var.opsrabbit_encryption_key
   }
 
-  depends_on = [google_container_node_pool.opsrabbit, data.google_container_cluster.shared, google_service_account_iam_member.gke_workload_identity, google_artifact_registry_repository_iam_member.gke_autopilot_pull]
+  depends_on = [google_container_node_pool.opsrabbit, data.google_container_cluster.shared, google_service_account_iam_member.gke_workload_identity, google_artifact_registry_repository_iam_member.gke_autopilot_pull, google_project_iam_member.gke_autopilot_default_role]
 }
