@@ -51,17 +51,19 @@ class HelmChartTests(unittest.TestCase):
     def test_rendered_workloads_have_security_and_health_defaults(self):
         self.assertEqual(self.rendered.count("runAsNonRoot: true"), 2)
         self.assertEqual(self.rendered.count("runAsUser: 10001"), 2)
-        self.assertEqual(self.rendered.count("readOnlyRootFilesystem: true"), 2)
-        self.assertEqual(self.rendered.count("allowPrivilegeEscalation: false"), 2)
+        self.assertEqual(self.rendered.count("readOnlyRootFilesystem: true"), 3)
+        self.assertEqual(self.rendered.count("allowPrivilegeEscalation: false"), 3)
         self.assertEqual(self.rendered.count("path: /health"), 3)
         self.assertNotIn("privileged: true", self.rendered)
         self.assertNotIn("hostNetwork: true", self.rendered)
 
     def test_rendered_workloads_use_secret_references(self):
-        self.assertEqual(self.rendered.count("secretKeyRef:"), 3)
+        self.assertEqual(self.rendered.count("secretKeyRef:"), 4)
         self.assertIn("key: DATABASE_URL", self.rendered)
         self.assertIn("key: BETTER_AUTH_SECRET", self.rendered)
         self.assertIn("key: OPSRABBIT_NODE_ENCRYPTION_KEY", self.rendered)
+        self.assertIn("name: OPSRABBIT_NODE_DATABASE_URL", self.rendered)
+        self.assertIn("name: WEB_API_UPSTREAM", self.rendered)
 
     def test_inline_secret_values_create_a_secret(self):
         rendered = self.render(
