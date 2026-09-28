@@ -101,7 +101,6 @@ resource "google_container_cluster" "opsrabbit" {
   resource_labels = local.common_labels
 
   depends_on = [google_project_service.required]
-
 }
 
 resource "google_container_cluster" "autopilot" {
@@ -126,7 +125,6 @@ resource "google_container_cluster" "autopilot" {
   resource_labels = local.common_labels
 
   depends_on = [google_project_service.required]
-
 }
 
 resource "google_container_node_pool" "opsrabbit" {
