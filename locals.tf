@@ -23,4 +23,8 @@ locals {
   gke_cluster_endpoint       = var.deployment_mode == "shared" ? try(data.google_container_cluster.shared[0].endpoint, null) : var.deployment_mode == "autopilot" ? try(google_container_cluster.autopilot[0].endpoint, null) : try(google_container_cluster.opsrabbit[0].endpoint, null)
   gke_cluster_ca_certificate = var.deployment_mode == "shared" ? try(data.google_container_cluster.shared[0].master_auth[0].cluster_ca_certificate, null) : var.deployment_mode == "autopilot" ? try(google_container_cluster.autopilot[0].master_auth[0].cluster_ca_certificate, null) : try(google_container_cluster.opsrabbit[0].master_auth[0].cluster_ca_certificate, null)
   gke_cluster_self_link      = var.deployment_mode == "shared" ? try(data.google_container_cluster.shared[0].self_link, null) : var.deployment_mode == "autopilot" ? try(google_container_cluster.autopilot[0].self_link, null) : try(google_container_cluster.opsrabbit[0].self_link, null)
+
+  helm_kubernetes_host           = coalesce(var.helm_kubernetes_host_override, local.gke_cluster_endpoint, "https://127.0.0.1")
+  helm_kubernetes_ca_certificate = var.helm_kubernetes_ca_certificate_override != null ? var.helm_kubernetes_ca_certificate_override : local.gke_cluster_ca_certificate != null ? local.gke_cluster_ca_certificate : ""
+  helm_kubernetes_token          = coalesce(var.helm_kubernetes_token_override, try(data.google_client_config.current.access_token, ""))
 }

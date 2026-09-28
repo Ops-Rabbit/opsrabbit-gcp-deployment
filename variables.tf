@@ -357,6 +357,26 @@ variable "deployment_mode" {
   }
 }
 
+variable "helm_kubernetes_host_override" {
+  description = "Kubernetes API endpoint to use while Terraform tears down a previous GKE Helm release during a deployment_mode switch. Capture it before switching to cloud_run."
+  type        = string
+  default     = null
+}
+
+variable "helm_kubernetes_ca_certificate_override" {
+  description = "Base64-encoded cluster CA certificate paired with helm_kubernetes_host_override for a GKE-to-Cloud-Run teardown."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "helm_kubernetes_token_override" {
+  description = "Short-lived Kubernetes bearer token paired with the teardown endpoint and CA certificate."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
 variable "gke_cluster_name" {
   description = "GKE cluster name to create, or existing cluster name when deployment_mode is shared. Ignored for cloud_run."
   type        = string

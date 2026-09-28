@@ -247,6 +247,13 @@ route to the Cloud SQL private service access range.
 Keep Terraform state in an encrypted, access-controlled GCS backend. The
 `gke_helm_values` map is intentionally for non-secret overrides only.
 
+When switching an existing GKE deployment back to `cloud_run`, preserve the
+old cluster connection for the Helm release teardown by supplying
+`helm_kubernetes_host_override`, `helm_kubernetes_ca_certificate_override`,
+and `helm_kubernetes_token_override` from the existing cluster in that apply.
+This is required when the runner does not have a kubeconfig for the old
+cluster; the overrides are teardown-only and can be removed on the next apply.
+
 For VPN-only access, use [`private.tfvars.example`](private.tfvars.example). Private mode provisions an
 internal HTTPS load balancer and source allowlist while disabling direct
 Cloud Run URLs. The customer supplies VPN connectivity, DNS and TLS certificates.
