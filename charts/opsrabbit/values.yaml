@@ -64,6 +64,14 @@ web:
   containerPort: 80
   servicePort: 80
   imagePullPolicy: ""
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+      add:
+        - NET_BIND_SERVICE
   env: {}
   command: []
   args: []

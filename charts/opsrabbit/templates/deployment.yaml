@@ -154,7 +154,7 @@ spec:
           image: {{ required "image.web is required" .Values.image.web | quote }}
           imagePullPolicy: {{ include "opsrabbit.imagePullPolicy" (dict "value" .Values.web.imagePullPolicy "Values" .Values) }}
           securityContext:
-            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+            {{- toYaml .Values.web.securityContext | nindent 12 }}
           ports:
             - name: http
               containerPort: {{ .Values.web.containerPort }}
