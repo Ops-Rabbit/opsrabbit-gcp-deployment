@@ -61,7 +61,7 @@ backend:
   args: []
 
 web:
-  containerPort: 8080
+  containerPort: 80
   servicePort: 80
   imagePullPolicy: ""
   env: {}
