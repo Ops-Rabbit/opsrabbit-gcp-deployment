@@ -1,4 +1,8 @@
 {{- if .Values.ingress.enabled }}
+{{- $annotations := .Values.ingress.annotations }}
+{{- if .Values.gkeEndpoint.enabled }}
+{{- $annotations = omit $annotations "kubernetes.io/ingress.class" "kubernetes.io/ingress.global-static-ip-name" "ingress.gcp.kubernetes.io/pre-shared-cert" "networking.gke.io/v1beta1.FrontendConfig" "kubernetes.io/ingress.allow-http" }}
+{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -6,13 +10,23 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "opsrabbit.labels" . | nindent 4 }}
-  {{- with .Values.ingress.annotations }}
+  {{- if or .Values.ingress.annotations .Values.gkeEndpoint.enabled }}
   annotations:
+    {{- with $annotations }}
     {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- if .Values.gkeEndpoint.enabled }}
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.global-static-ip-name: {{ required "gkeEndpoint.staticIpName is required" .Values.gkeEndpoint.staticIpName | quote }}
+    ingress.gcp.kubernetes.io/pre-shared-cert: {{ required "gkeEndpoint.certificateNames is required" .Values.gkeEndpoint.certificateNames | quote }}
+    networking.gke.io/v1beta1.FrontendConfig: {{ include "opsrabbit.fullname" . }}
+    {{- end }}
   {{- end }}
 spec:
+  {{- if not .Values.gkeEndpoint.enabled }}
   {{- with .Values.ingress.className }}
   ingressClassName: {{ . }}
+  {{- end }}
   {{- end }}
   {{- with .Values.ingress.tls }}
   tls:

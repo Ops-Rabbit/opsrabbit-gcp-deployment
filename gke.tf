@@ -70,6 +70,26 @@ data "google_container_cluster" "shared" {
   project  = var.project_id
   name     = local.gke_cluster_name
   location = local.gke_cluster_location
+
+  lifecycle {
+    postcondition {
+      condition = var.gke_cluster_name == null || (
+        !var.create_vpc && try(
+          (strcontains(self.network, "/") ? trimprefix(self.network, "https://www.googleapis.com/compute/v1/") : "projects/${var.project_id}/global/networks/${self.network}") ==
+          trimprefix(var.existing_network_self_link, "https://www.googleapis.com/compute/v1/"), false
+        )
+      )
+      error_message = "Shared GKE requires create_vpc=false and the existing cluster VPC as existing_network_self_link so the application can reach its private database."
+    }
+    postcondition {
+      condition = var.gke_cluster_name == null || try(
+        self.workload_identity_config[0].workload_pool == "${var.project_id}.svc.id.goog" &&
+        length(self.ip_allocation_policy) > 0 &&
+        !self.addons_config[0].http_load_balancing[0].disabled, false
+      )
+      error_message = "The shared cluster must be VPC-native with Workload Identity and the GKE HTTP load-balancing add-on enabled. The installer does not modify customer cluster settings."
+    }
+  }
 }
 
 resource "google_container_cluster" "opsrabbit" {
@@ -185,7 +205,34 @@ resource "helm_release" "opsrabbit" {
   cleanup_on_fail  = true
   wait             = true
   timeout          = 900
-  values           = [yamlencode(var.gke_helm_values)]
+  values = [yamlencode(var.gke_helm_values), yamlencode({
+    service = { type = "ClusterIP" }
+    backend = { env = {
+      NODE_ENV                     = "production"
+      OPSRABBIT_NODE_HOST          = "0.0.0.0"
+      OPSRABBIT_NODE_PORT          = "8384"
+      OPSRABBIT_WEB_ORIGIN         = var.application_origin
+      OPSRABBIT_NODE_BASE_URL      = var.application_origin == null ? "" : "${var.application_origin}/api"
+      OPSRABBIT_NODE_DATA_DIR      = "/home/opsbot/.opsrabbit"
+      OPSRABBIT_NODE_WORKSPACE_DIR = "/home/opsbot/git"
+    } }
+    web = { env = {
+      VITE_API_URL    = "/api"
+      WEB_TLS_MODE    = "http"
+      WEB_SERVER_NAME = local.public_endpoint_hostname
+    } }
+    ingress = {
+      enabled   = local.public_gke_endpoint
+      className = ""
+      hosts     = [{ host = local.public_endpoint_hostname, paths = [{ path = "/", pathType = "Prefix" }] }]
+    }
+    gkeEndpoint = {
+      enabled          = local.public_gke_endpoint
+      staticIpName     = try(google_compute_global_address.application[0].name, "")
+      certificateNames = join(",", [for cert in local.public_endpoint_certificates : basename(cert)])
+      sslPolicy        = try(google_compute_ssl_policy.application[0].name, "")
+    }
+  })]
 
   set {
     name  = "image.backend"

@@ -17,6 +17,7 @@ resource "google_project_service" "required" {
     "workflowexecutions.googleapis.com",
     "cloudscheduler.googleapis.com",
     "container.googleapis.com",
+    "dns.googleapis.com",
   ])
 
   project            = var.project_id

@@ -31,7 +31,33 @@ output "project_id" {
 }
 
 output "opsrabbit_url" {
-  value = local.cloud_run_enabled ? (var.network_mode == "private" ? var.application_origin : google_cloud_run_v2_service.opsrabbit[0].uri) : null
+  description = "Canonical application URL for the selected runtime. Verify DNS, TLS and /api/health before declaring installation complete."
+  value       = local.cloud_run_enabled || local.gke_enabled ? var.application_origin : null
+}
+
+output "public_load_balancer_ip" {
+  description = "Static address for the application domain's A record; null for native Cloud Run or private access."
+  value       = try(google_compute_global_address.application[0].address, null)
+}
+
+output "application_dns_record" {
+  description = "Required DNS record, including whether the installer manages it. Certificate issuance requires this domain to resolve to the load balancer."
+  value = local.public_endpoint_enabled ? {
+    name    = local.public_endpoint_hostname
+    type    = "A"
+    value   = google_compute_global_address.application[0].address
+    managed = var.endpoint_dns_managed_zone != null
+  } : null
+}
+
+output "installation" {
+  description = "Installer handoff metadata, not a live readiness assertion. Use scripts/verify-installation.py after apply."
+  value = {
+    url                  = local.cloud_run_enabled || local.gke_enabled ? var.application_origin : null
+    deployment_mode      = var.deployment_mode
+    access_mode          = var.network_mode
+    verify_http_redirect = local.public_endpoint_enabled
+  }
 }
 
 output "private_load_balancer_ip" {

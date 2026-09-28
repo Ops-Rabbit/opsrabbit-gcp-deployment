@@ -94,6 +94,38 @@ class HelmChartTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("image.backend is required", result.stderr)
 
+    def test_backend_stays_internal_when_web_is_exposed(self):
+        rendered = self.render("--set", "service.type=LoadBalancer")
+        services = [doc for doc in rendered.split("---") if "kind: Service\n" in doc]
+        backend = next(doc for doc in services if "component: backend" in doc)
+        web = next(doc for doc in services if "component: web" in doc)
+        self.assertIn("type: ClusterIP", backend)
+        self.assertIn("type: LoadBalancer", web)
+
+    def test_gke_endpoint_routes_only_to_web_and_checks_api(self):
+        rendered = self.render(
+            "--set", "ingress.enabled=true",
+            "--set", "gkeEndpoint.enabled=true",
+            "--set", "gkeEndpoint.staticIpName=application-ip",
+            "--set", "gkeEndpoint.certificateNames=application-cert",
+            "--set", "gkeEndpoint.sslPolicy=application-tls",
+            "--set", "service.type=LoadBalancer",
+        )
+        self.assertIn("kubernetes.io/ingress.class: gce", rendered)
+        self.assertIn('ingress.gcp.kubernetes.io/pre-shared-cert: "application-cert"', rendered)
+        self.assertIn('kubernetes.io/ingress.global-static-ip-name: "application-ip"', rendered)
+        self.assertIn("kind: FrontendConfig", rendered)
+        self.assertIn("redirectToHttps:\n    enabled: true", rendered)
+        self.assertIn("requestPath: /api/health", rendered)
+        self.assertIn("timeoutSec: 3600", rendered)
+        services = [doc for doc in rendered.split("---") if "kind: Service\n" in doc]
+        self.assertTrue(all("type: ClusterIP" in doc for doc in services))
+        backend = next(doc for doc in services if "component: backend" in doc)
+        self.assertNotIn("cloud.google.com/neg", backend)
+        ingress = next(doc for doc in rendered.split("---") if "kind: Ingress\n" in doc)
+        self.assertIn("name: opsrabbit-opsrabbit-web", ingress)
+        self.assertNotIn("name: opsrabbit-opsrabbit-backend", ingress)
+
 
 if __name__ == "__main__":
     unittest.main()

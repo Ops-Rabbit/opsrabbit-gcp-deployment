@@ -30,13 +30,17 @@ variable "labels" {
 # source restrictions and no direct run.app access.
 
 variable "network_mode" {
-  description = "Application exposure: public Cloud Run URL or private HTTPS ingress. VPN/private connectivity, DNS and certificates remain customer-managed."
+  description = "Application exposure. Public HTTPS is supported for all four runtimes; private HTTPS currently supports Cloud Run. VPN/private connectivity remains customer-managed."
   type        = string
   default     = "public"
 
   validation {
     condition     = contains(["public", "private"], var.network_mode)
     error_message = "network_mode must be \"public\" or \"private\"."
+  }
+  validation {
+    condition     = var.network_mode != "private" || var.deployment_mode == "cloud_run"
+    error_message = "Private GKE endpoint provisioning is not implemented. Use public access for GKE or private Cloud Run; the installer must not silently leave the application unreachable."
   }
 }
 
@@ -141,8 +145,8 @@ variable "backend_image" {
   type        = string
 
   validation {
-    condition     = !var.application_enabled || can(regex("^[a-z0-9-]+-docker[.]pkg[.]dev/[^/]+/[^/]+/.+@sha256:[0-9a-f]{64}$", var.backend_image))
-    error_message = "backend_image must be an Artifact Registry image pinned to a SHA-256 digest when application_enabled is true."
+    condition     = (!var.application_enabled && var.deployment_mode == "cloud_run") || can(regex("^[a-z0-9-]+-docker[.]pkg[.]dev/[^/]+/[^/]+/.+@sha256:[0-9a-f]{64}$", var.backend_image))
+    error_message = "backend_image must be an Artifact Registry image pinned to a SHA-256 digest for every application installation."
   }
 }
 
@@ -151,8 +155,8 @@ variable "web_image" {
   type        = string
 
   validation {
-    condition     = !var.application_enabled || can(regex("^[a-z0-9-]+-docker[.]pkg[.]dev/[^/]+/[^/]+/.+@sha256:[0-9a-f]{64}$", var.web_image))
-    error_message = "web_image must be an Artifact Registry image pinned to a SHA-256 digest when application_enabled is true."
+    condition     = (!var.application_enabled && var.deployment_mode == "cloud_run") || can(regex("^[a-z0-9-]+-docker[.]pkg[.]dev/[^/]+/[^/]+/.+@sha256:[0-9a-f]{64}$", var.web_image))
+    error_message = "web_image must be an Artifact Registry image pinned to a SHA-256 digest for every application installation."
   }
 }
 
@@ -297,13 +301,35 @@ variable "opsrabbit_encryption_key" {
 }
 
 variable "application_origin" {
-  description = "HTTPS origin used by clients; required when application_enabled is true. Configure DNS/routing separately for a custom domain."
+  description = "Customer-facing HTTPS origin. Required for every application installation. Public custom domains receive installer-managed HTTPS routing."
   type        = string
   default     = null
 
   validation {
-    condition     = var.application_origin == null ? !var.application_enabled : can(regex("^https://[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]+)?$", var.application_origin))
+    condition     = var.application_origin == null ? (!var.application_enabled && var.deployment_mode == "cloud_run") : can(regex("^https://[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$", var.application_origin))
     error_message = "Set application_origin to a real HTTPS origin (no path or trailing slash) before enabling the application."
+  }
+  validation {
+    condition     = var.deployment_mode == "cloud_run" || !try(endswith(var.application_origin, ".run.app"), false)
+    error_message = "GKE requires a customer domain; run.app hostnames belong to Cloud Run."
+  }
+}
+
+variable "endpoint_dns_managed_zone" {
+  description = "Existing public Cloud DNS zone in project_id. The installer creates the application's A record; null means DNS is managed externally."
+  type        = string
+  default     = null
+}
+
+variable "endpoint_ssl_certificate_self_links" {
+  description = "Existing global Compute SSL certificates for a public custom domain. Empty uses a Google-managed certificate. Certificate Manager references are not supported by GKE Ingress."
+  type        = list(string)
+  default     = []
+  validation {
+    condition = length(var.endpoint_ssl_certificate_self_links) <= 15 && alltrue([
+      for cert in var.endpoint_ssl_certificate_self_links : can(regex("^(https://www.googleapis.com/compute/v1/)?projects/${var.project_id}/global/sslCertificates/[^/]+$", cert))
+    ])
+    error_message = "Supply at most 15 global Compute SSL certificate references in the deployment project."
   }
 }
 
@@ -507,6 +533,10 @@ variable "gke_helm_chart_version" {
 
 variable "gke_helm_values" {
   description = "Additional non-secret Helm values for the OpsRabbit release. Do not put credentials in this map."
-  type        = map(string)
+  type        = any
   default     = {}
+  validation {
+    condition     = can(keys(var.gke_helm_values))
+    error_message = "gke_helm_values must be an object containing non-secret chart overrides."
+  }
 }

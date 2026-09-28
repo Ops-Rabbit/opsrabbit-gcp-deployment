@@ -1,3 +1,7 @@
+{{- $webAnnotations := .Values.service.annotations }}
+{{- if .Values.gkeEndpoint.enabled }}
+{{- $webAnnotations = omit $webAnnotations "cloud.google.com/neg" "cloud.google.com/backend-config" }}
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -11,7 +15,7 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  type: {{ .Values.service.type }}
+  type: ClusterIP
   ports:
     - name: http
       port: {{ .Values.backend.servicePort }}
@@ -29,12 +33,18 @@ metadata:
   labels:
     {{- include "opsrabbit.labels" . | nindent 4 }}
     app.kubernetes.io/component: web
-  {{- with .Values.service.annotations }}
+  {{- if or .Values.service.annotations .Values.gkeEndpoint.enabled }}
   annotations:
+    {{- with $webAnnotations }}
     {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- if .Values.gkeEndpoint.enabled }}
+    cloud.google.com/neg: '{"ingress":true}'
+    cloud.google.com/backend-config: '{"default":"{{ include "opsrabbit.fullname" . }}"}'
+    {{- end }}
   {{- end }}
 spec:
-  type: {{ .Values.service.type }}
+  type: {{ if .Values.gkeEndpoint.enabled }}ClusterIP{{ else }}{{ .Values.service.type }}{{ end }}
   ports:
     - name: http
       port: {{ .Values.web.servicePort }}

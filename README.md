@@ -170,13 +170,25 @@ Set `backend_image` / `web_image` in `terraform.tfvars` to the resulting
 ### 6. Configure the origin and deploy
 
 Set `application_origin` to the HTTPS origin clients will actually use, without
-an API path or trailing slash. It is required when enabling the service. For a
-custom domain, provision DNS and HTTPS routing separately; this module does not
-create public domain mappings or a public load balancer. Private mode provisions
-an internal load balancer as described below. To use Cloud Run's deterministic URL,
+an API path, explicit port or trailing slash. It is required for application installation
+in every runtime. Public custom domains receive an installer-managed static IP,
+HTTPS load balancer, TLS 1.2+ policy and HTTP-to-HTTPS redirect. By default the
+installer requests a Google-managed certificate. Supply
+`endpoint_ssl_certificate_self_links` to use existing global Compute SSL
+certificates instead. Private Cloud Run mode provisions an internal load balancer
+as described below. To use Cloud Run's deterministic URL without a separate load balancer,
 obtain the project number with `gcloud projects describe PROJECT_ID
 --format='value(projectNumber)'` and use
 `https://NAME_PREFIX-app-PROJECT_NUMBER.REGION.run.app`.
+
+Set `endpoint_dns_managed_zone` to an existing public Cloud DNS zone in the
+deployment project to create the A record automatically. With external DNS,
+create the record printed by `application_dns_record`; the installer cannot
+modify an external DNS provider without its credentials. Google-managed
+certificate issuance waits for DNS to resolve to the load balancer and can take
+longer than the Terraform apply. Do not publish an AAAA record unless an IPv6
+frontend has also been configured. TLS provisioning and DNS are installation
+steps, not optional testing shortcuts.
 
 Application image references must be Artifact Registry SHA-256 digests when
 enabling the service; bootstrap placeholders are allowed only while disabled.
@@ -207,6 +219,19 @@ frontend HTML, so an HTTP 200 there does not establish backend health.
 curl --fail --show-error "$(terraform output -raw opsrabbit_url)/api/health"
 ```
 
+Run the endpoint readiness check from a machine with access to the application:
+
+```bash
+python3 scripts/verify-installation.py
+```
+
+It waits up to 30 minutes for valid HTTPS, an HTML web UI, JSON backend health
+with `ok: true`, and the public custom-domain HTTP redirect. It exits nonzero
+when those checks fail and never bypasses certificate validation. Use `--timeout`
+to set a different bound. Endpoint readiness does not establish that administrator
+onboarding, login, integrations, storage recovery or agent workflows have passed;
+those require acceptance testing against the approved product release.
+
 ## Upgrades
 
 Get the next approved release manifest, re-import both digests, update
@@ -222,6 +247,24 @@ Choose exactly one `deployment_mode`: `cloud_run`, `standard`, `autopilot`, or
 `shared`. Cloud Run is the default. The GKE values deploy the application
 through the OpsRabbit Helm chart and do not create Cloud Run resources:
 
+All four modes accept the same public endpoint inputs and return `opsrabbit_url`.
+For example, select a runtime and supply customer installation settings:
+
+```hcl
+deployment_mode           = "standard" # cloud_run, standard, autopilot, shared
+application_enabled       = true
+application_origin        = "https://opsrabbit.customer.example"
+endpoint_dns_managed_zone = "customer-public-zone"
+```
+
+Project, image digests and secrets are still required as shown in the full
+example file. Customers do not need to choose a Kubernetes Service type,
+Ingress class, certificate annotation or backend URL. The installer configures
+those from the application origin. Only the web service is routed publicly;
+the backend always remains a ClusterIP service. GKE's controller manages its
+load balancer through the chart's Ingress, FrontendConfig and BackendConfig.
+The load-balancer health check exercises `/api/health` through the web proxy.
+
 - `standard` creates a GKE Standard cluster and an auto-repairing,
   auto-upgrading node pool. Use `gke_network_self_link` and
   `gke_subnetwork_self_link` to place it in an existing VPC, or let it use the
@@ -230,6 +273,21 @@ through the OpsRabbit Helm chart and do not create Cloud Run resources:
 - `shared` looks up an existing cluster using the required
   `gke_cluster_name` and `gke_cluster_location` values. Terraform does not
   modify or delete that cluster.
+
+Shared mode additionally requires `create_vpc=false`, the cluster's VPC in
+`existing_network_self_link`, and a suitable existing subnet in
+`existing_subnet_self_link`. Plan-time checks require a VPC-native cluster,
+Workload Identity for the deployment project and the HTTP load-balancing add-on.
+The installation identity must reach the Kubernetes API and be allowed to create
+namespace resources, including Ingress/FrontendConfig/BackendConfig. The existing
+node identity must be able to pull the supplied private images, and cluster policy
+must allow load-balancer health checks and traffic to the web pods. The installer
+does not reconfigure the customer's cluster or its organization policies.
+
+Private GKE endpoint provisioning is not implemented and is rejected explicitly;
+private access currently supports Cloud Run only. Public endpoint provisioning
+covers all four runtime choices. A change of runtime on an existing installation
+is a migration and is not equivalent to a fresh installation.
 
 GKE uses the chart bundled at `charts/opsrabbit` by default, so the first
 deployment can use the local chart path without publishing a chart. To use an
