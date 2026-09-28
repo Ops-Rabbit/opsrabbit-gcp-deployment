@@ -357,6 +357,12 @@ variable "deployment_mode" {
   }
 }
 
+variable "gke_deletion_protection" {
+  description = "Protect module-created GKE clusters from deletion. Set false in a preparatory apply before switching standard or autopilot deployments to cloud_run."
+  type        = bool
+  default     = true
+}
+
 variable "helm_kubernetes_host_override" {
   description = "Kubernetes API endpoint to use while Terraform tears down a previous GKE Helm release during a deployment_mode switch. Capture it before switching to cloud_run."
   type        = string

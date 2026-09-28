@@ -84,7 +84,7 @@ resource "google_container_cluster" "opsrabbit" {
 
   remove_default_node_pool    = true
   initial_node_count          = 1
-  deletion_protection         = true
+  deletion_protection         = var.gke_deletion_protection
   enable_shielded_nodes       = true
   enable_intranode_visibility = true
 
@@ -114,7 +114,7 @@ resource "google_container_cluster" "autopilot" {
   subnetwork = local.gke_subnetwork
 
   enable_autopilot    = true
-  deletion_protection = true
+  deletion_protection = var.gke_deletion_protection
 
   ip_allocation_policy {}
 

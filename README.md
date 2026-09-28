@@ -253,6 +253,10 @@ old cluster connection for the Helm release teardown by supplying
 and `helm_kubernetes_token_override` from the existing cluster in that apply.
 This is required when the runner does not have a kubeconfig for the old
 cluster; the overrides are teardown-only and can be removed on the next apply.
+For module-created Standard or Autopilot clusters, first apply the current GKE
+mode with `gke_deletion_protection=false`, then apply `cloud_run` with those
+teardown overrides. This two-phase sequence prevents accidental cluster
+deletion while allowing the selected mode to change safely.
 
 For VPN-only access, use [`private.tfvars.example`](private.tfvars.example). Private mode provisions an
 internal HTTPS load balancer and source allowlist while disabling direct
