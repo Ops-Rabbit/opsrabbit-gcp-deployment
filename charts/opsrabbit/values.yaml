@@ -83,6 +83,13 @@ ingress:
           pathType: Prefix
   tls: []
 
+# Populated by the Terraform installer for a public GKE application endpoint.
+gkeEndpoint:
+  enabled: false
+  staticIpName: ""
+  certificateNames: ""
+  sslPolicy: ""
+
 secrets:
   existingSecret: ""
   databaseUrl: ""

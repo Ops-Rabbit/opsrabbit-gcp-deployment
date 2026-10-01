@@ -30,13 +30,17 @@ variable "labels" {
 # source restrictions and no direct run.app access.
 
 variable "network_mode" {
-  description = "Application exposure: public Cloud Run URL or private HTTPS ingress. VPN/private connectivity, DNS and certificates remain customer-managed."
+  description = "Application exposure. Public HTTPS is supported for all four runtimes; private HTTPS currently supports Cloud Run. VPN/private connectivity remains customer-managed."
   type        = string
   default     = "public"
 
   validation {
     condition     = contains(["public", "private"], var.network_mode)
     error_message = "network_mode must be \"public\" or \"private\"."
+  }
+  validation {
+    condition     = var.network_mode != "private" || var.deployment_mode == "cloud_run"
+    error_message = "Private GKE endpoint provisioning is not implemented. Use public access for GKE or private Cloud Run; the installer must not silently leave the application unreachable."
   }
 }
 
@@ -141,8 +145,8 @@ variable "backend_image" {
   type        = string
 
   validation {
-    condition     = !var.application_enabled || can(regex("^[a-z0-9-]+-docker[.]pkg[.]dev/[^/]+/[^/]+/.+@sha256:[0-9a-f]{64}$", var.backend_image))
-    error_message = "backend_image must be an Artifact Registry image pinned to a SHA-256 digest when application_enabled is true."
+    condition     = (!var.application_enabled && var.deployment_mode == "cloud_run") || can(regex("^[a-z0-9-]+-docker[.]pkg[.]dev/[^/]+/[^/]+/.+@sha256:[0-9a-f]{64}$", var.backend_image))
+    error_message = "backend_image must be an Artifact Registry image pinned to a SHA-256 digest for every application installation."
   }
 }
 
@@ -151,8 +155,8 @@ variable "web_image" {
   type        = string
 
   validation {
-    condition     = !var.application_enabled || can(regex("^[a-z0-9-]+-docker[.]pkg[.]dev/[^/]+/[^/]+/.+@sha256:[0-9a-f]{64}$", var.web_image))
-    error_message = "web_image must be an Artifact Registry image pinned to a SHA-256 digest when application_enabled is true."
+    condition     = (!var.application_enabled && var.deployment_mode == "cloud_run") || can(regex("^[a-z0-9-]+-docker[.]pkg[.]dev/[^/]+/[^/]+/.+@sha256:[0-9a-f]{64}$", var.web_image))
+    error_message = "web_image must be an Artifact Registry image pinned to a SHA-256 digest for every application installation."
   }
 }
 
@@ -297,13 +301,35 @@ variable "opsrabbit_encryption_key" {
 }
 
 variable "application_origin" {
-  description = "HTTPS origin used by clients; required when application_enabled is true. Configure DNS/routing separately for a custom domain."
+  description = "Customer-facing HTTPS origin. Required for every application installation. Public custom domains receive installer-managed HTTPS routing."
   type        = string
   default     = null
 
   validation {
-    condition     = var.application_origin == null ? !var.application_enabled : can(regex("^https://[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]+)?$", var.application_origin))
+    condition     = var.application_origin == null ? (!var.application_enabled && var.deployment_mode == "cloud_run") : can(regex("^https://[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$", var.application_origin))
     error_message = "Set application_origin to a real HTTPS origin (no path or trailing slash) before enabling the application."
+  }
+  validation {
+    condition     = var.deployment_mode == "cloud_run" || !try(endswith(var.application_origin, ".run.app"), false)
+    error_message = "GKE requires a customer domain; run.app hostnames belong to Cloud Run."
+  }
+}
+
+variable "endpoint_dns_managed_zone" {
+  description = "Existing public Cloud DNS zone in project_id. The installer creates the application's A record; null means DNS is managed externally."
+  type        = string
+  default     = null
+}
+
+variable "endpoint_ssl_certificate_self_links" {
+  description = "Existing global Compute SSL certificates for a public custom domain. Empty uses a Google-managed certificate. Certificate Manager references are not supported by GKE Ingress."
+  type        = list(string)
+  default     = []
+  validation {
+    condition = length(var.endpoint_ssl_certificate_self_links) <= 15 && alltrue([
+      for cert in var.endpoint_ssl_certificate_self_links : can(regex("^(https://www.googleapis.com/compute/v1/)?projects/${var.project_id}/global/sslCertificates/[^/]+$", cert))
+    ])
+    error_message = "Supply at most 15 global Compute SSL certificate references in the deployment project."
   }
 }
 
@@ -339,5 +365,178 @@ variable "filestore_backup_retention_days" {
   validation {
     condition     = var.filestore_backup_retention_days >= 1 && floor(var.filestore_backup_retention_days) == var.filestore_backup_retention_days
     error_message = "Backup retention must be a positive whole number of days."
+  }
+}
+
+# ---------------------------------------------------------------------------
+# GKE deployment modes
+# ---------------------------------------------------------------------------
+
+variable "deployment_mode" {
+  description = "The single application deployment target: Cloud Run, a new GKE Standard or Autopilot cluster, or an existing shared GKE cluster."
+  type        = string
+  default     = "cloud_run"
+
+  validation {
+    condition     = contains(["cloud_run", "standard", "shared", "autopilot"], var.deployment_mode)
+    error_message = "deployment_mode must be cloud_run, standard, shared, or autopilot."
+  }
+}
+
+variable "gke_deletion_protection" {
+  description = "Protect module-created GKE clusters from deletion. Set false in a preparatory apply before switching standard or autopilot deployments to cloud_run."
+  type        = bool
+  default     = true
+}
+
+variable "helm_kubernetes_host_override" {
+  description = "Kubernetes API endpoint to use while Terraform tears down a previous GKE Helm release during a deployment_mode switch. Capture it before switching to cloud_run."
+  type        = string
+  default     = null
+}
+
+variable "helm_kubernetes_ca_certificate_override" {
+  description = "Base64-encoded cluster CA certificate paired with helm_kubernetes_host_override for a GKE-to-Cloud-Run teardown."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "helm_kubernetes_token_override" {
+  description = "Short-lived Kubernetes bearer token paired with the teardown endpoint and CA certificate."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "gke_cluster_name" {
+  description = "GKE cluster name to create, or existing cluster name when deployment_mode is shared. Ignored for cloud_run."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.gke_cluster_name == null || can(regex("^[a-z]([-a-z0-9]*[a-z0-9])?$", var.gke_cluster_name))
+    error_message = "gke_cluster_name must contain only lowercase letters, numbers, and hyphens, and start with a letter."
+  }
+  validation {
+    condition     = var.deployment_mode != "shared" || var.gke_cluster_name != null
+    error_message = "gke_cluster_name is required when deployment_mode is shared."
+  }
+}
+
+variable "gke_cluster_location" {
+  description = "GKE cluster region or zone. Regional clusters are recommended for production Standard deployments; ignored for cloud_run."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.deployment_mode != "shared" || var.gke_cluster_location != null
+    error_message = "gke_cluster_location is required when deployment_mode is shared."
+  }
+}
+
+variable "gke_network_self_link" {
+  description = "Optional GKE VPC self-link. Defaults to this module's VPC for created clusters."
+  type        = string
+  default     = null
+}
+
+variable "gke_subnetwork_self_link" {
+  description = "Optional GKE subnetwork self-link. Defaults to this module's subnetwork for created clusters."
+  type        = string
+  default     = null
+}
+
+variable "gke_node_machine_type" {
+  description = "Machine type for the GKE Standard node pool. Ignored by shared and Autopilot modes."
+  type        = string
+  default     = "e2-standard-4"
+}
+
+variable "gke_node_count" {
+  description = "Initial and per-zone node count for GKE Standard."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = floor(var.gke_node_count) == var.gke_node_count && var.gke_node_count >= 1 && var.gke_node_count <= 100
+    error_message = "gke_node_count must be a whole number between 1 and 100."
+  }
+}
+
+variable "gke_node_disk_size_gb" {
+  description = "Boot disk size for GKE Standard nodes."
+  type        = number
+  default     = 100
+
+  validation {
+    condition     = floor(var.gke_node_disk_size_gb) == var.gke_node_disk_size_gb && var.gke_node_disk_size_gb >= 30 && var.gke_node_disk_size_gb <= 65536
+    error_message = "gke_node_disk_size_gb must be a whole number between 30 and 65536."
+  }
+}
+
+variable "gke_node_service_account" {
+  description = "Optional least-privilege service account for GKE Standard nodes."
+  type        = string
+  default     = null
+}
+
+variable "gke_postgresql_host" {
+  description = "Optional PostgreSQL host reachable from GKE. Defaults to the Cloud SQL private IP; set this for shared-cluster network routing or a customer-managed proxy."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.gke_postgresql_host == null || can(regex("^[A-Za-z0-9._:-]+$", var.gke_postgresql_host))
+    error_message = "gke_postgresql_host must be a hostname, IPv4 address, or IPv6 address without a URL scheme or path."
+  }
+}
+
+variable "gke_namespace" {
+  description = "Kubernetes namespace for the OpsRabbit Helm release."
+  type        = string
+  default     = "opsrabbit"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.gke_namespace)) && length(var.gke_namespace) <= 63
+    error_message = "gke_namespace must be a valid Kubernetes DNS label of at most 63 characters."
+  }
+}
+
+variable "gke_helm_repository" {
+  description = "Optional HTTPS Helm repository containing the OpsRabbit chart. When null, use the chart bundled at charts/opsrabbit."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.gke_helm_repository == null || can(regex("^https://[^ ]+$", var.gke_helm_repository))
+    error_message = "gke_helm_repository must be null for the bundled chart or an HTTPS URL for an external chart."
+  }
+}
+
+variable "gke_helm_chart" {
+  description = "OpsRabbit Helm chart name for an external repository; ignored when gke_helm_repository is null."
+  type        = string
+  default     = "opsrabbit"
+}
+
+variable "gke_helm_chart_version" {
+  description = "Immutable OpsRabbit Helm chart version. Required for an external repository; not used for the bundled local chart."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.gke_helm_repository == null || (var.gke_helm_chart_version != null && can(regex("^[A-Za-z0-9][A-Za-z0-9.+_-]*$", var.gke_helm_chart_version)))
+    error_message = "gke_helm_chart_version must be set to a non-empty version when an external Helm repository is configured."
+  }
+}
+
+variable "gke_helm_values" {
+  description = "Additional non-secret Helm values for the OpsRabbit release. Do not put credentials in this map."
+  type        = any
+  default     = {}
+  validation {
+    condition     = can(keys(var.gke_helm_values))
+    error_message = "gke_helm_values must be an object containing non-secret chart overrides."
   }
 }

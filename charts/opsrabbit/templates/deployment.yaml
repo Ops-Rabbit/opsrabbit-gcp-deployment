@@ -51,6 +51,11 @@ spec:
                 secretKeyRef:
                   name: {{ include "opsrabbit.secretName" . }}
                   key: {{ .Values.secrets.databaseUrlKey }}
+            - name: OPSRABBIT_NODE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "opsrabbit.secretName" . }}
+                  key: {{ .Values.secrets.databaseUrlKey }}
             - name: BETTER_AUTH_SECRET
               valueFrom:
                 secretKeyRef:
@@ -165,6 +170,8 @@ spec:
           env:
             - name: BACKEND_URL
               value: http://{{ include "opsrabbit.fullname" . }}-backend:{{ .Values.backend.servicePort }}
+            - name: WEB_API_UPSTREAM
+              value: http://{{ include "opsrabbit.fullname" . }}-backend:{{ .Values.backend.servicePort }}
             {{- range $name, $value := .Values.web.env }}
             - name: {{ $name }}
               value: {{ $value | quote }}
@@ -192,8 +199,39 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: web-html
+              mountPath: /usr/share/nginx/html
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+      initContainers:
+        - name: web-assets
+          image: {{ required "image.web is required" .Values.image.web | quote }}
+          imagePullPolicy: {{ include "opsrabbit.imagePullPolicy" (dict "value" .Values.web.imagePullPolicy "Values" .Values) }}
+          command:
+            - /bin/sh
+            - -c
+            - cp -a /opt/opsrabbit/html/. /usr/share/nginx/html/
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources.web | nindent 12 }}
+          volumeMounts:
+            - name: web-html
+              mountPath: /usr/share/nginx/html
       volumes:
         - name: tmp
+          emptyDir: {}
+        - name: web-html
+          emptyDir: {}
+        - name: nginx-conf
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
           emptyDir: {}
       nodeSelector:
         {{- toYaml .Values.nodeSelector | nindent 8 }}
