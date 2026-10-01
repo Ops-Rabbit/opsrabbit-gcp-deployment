@@ -38,7 +38,11 @@ def check_endpoint(origin, verify_http_redirect=True):
                 raise ValueError("HTTP must redirect to HTTPS")
         except urllib.error.HTTPError as error:
             try:
-                if error.code not in (301, 308) or error.headers.get("Location") != origin + "/":
+                # GKE's HTTPS redirect can include the default :443 port.
+                # Accept only the same origin and path, with or without it.
+                if error.code not in (301, 308) or error.headers.get("Location") not in (
+                    origin + "/", origin + ":443/"
+                ):
                     raise ValueError("HTTP did not redirect to the canonical HTTPS origin") from error
             finally:
                 error.close()

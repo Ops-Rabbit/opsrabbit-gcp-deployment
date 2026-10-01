@@ -41,6 +41,9 @@ class InstallationVerifierTests(unittest.TestCase):
     def test_public_endpoint_requires_all_checks(self):
         self.assertEqual(self.check([self.ui(), self.health(), self.redirect()]), 3)
 
+    def test_gke_redirect_with_default_https_port_is_accepted(self):
+        self.assertEqual(self.check([self.ui(), self.health(), self.redirect("https://opsrabbit.example.com:443/")]), 3)
+
     def test_spa_fallback_does_not_pass_as_backend_health(self):
         with self.assertRaisesRegex(ValueError, "did not return JSON"):
             self.check([self.ui(), self.ui()])
@@ -55,8 +58,9 @@ class InstallationVerifierTests(unittest.TestCase):
             self.check([urllib.error.URLError("certificate verify failed")])
 
     def test_wrong_redirect_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, "canonical"):
-            self.check([self.ui(), self.health(), self.redirect("https://elsewhere.example.com/")])
+        for location in ("https://elsewhere.example.com/", "https://opsrabbit.example.com:444/"):
+            with self.subTest(location=location), self.assertRaisesRegex(ValueError, "canonical"):
+                self.check([self.ui(), self.health(), self.redirect(location)])
 
     def test_plaintext_application_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "must redirect"):
