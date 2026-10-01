@@ -31,6 +31,7 @@ Terraform for deploying OpsRabbit on Google Cloud.
 | `private-ingress.tf` | Optional internal HTTPS load balancer and source allowlist |
 | `gke.tf` | Optional GKE clusters, node pools, shared-cluster lookup, and Helm release |
 | `outputs.tf` | Deployment addresses and resource names |
+| `terraform.tfvars.example` | Secret-free example input; defaults to Cloud Run bootstrap |
 
 ## Helm deployment
 
@@ -44,7 +45,6 @@ Run the chart checks locally with:
 ```bash
 make helm-test
 ```
-| `terraform.tfvars.example` | Secret-free example input |
 
 ## Prerequisites
 
@@ -73,6 +73,36 @@ terraform {
 upgrades.
 
 ## Setup
+
+Choose exactly one runtime before applying. Steps 3–6 below describe **Cloud Run**
+bootstrap. For `standard`, `autopilot`, or `shared`, follow the
+[GKE installation sequence](#gke-installation-sequence) instead: GKE installs the
+Helm release immediately, even when `application_enabled = false`.
+
+### Authentication preflight (all runtimes)
+
+```bash
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+gcloud auth application-default login
+gcloud auth print-access-token >/dev/null
+```
+
+The CLI login and Application Default Credentials used by Terraform are separate.
+Use your organization's approved workload identity credentials instead for CI.
+Never put access tokens in `backend.tf`, Terraform variables, or Git. If an earlier
+initialization cached an expired backend token, remove that token from backend
+configuration and run `terraform init -reconfigure` against the **same verified
+bucket and prefix**. Do not migrate state or start a new state to bypass an auth
+failure.
+
+Before redeploying after teardown, inspect the existing remote state and cloud
+inventory. Retained registries, images, secrets and networking must remain in the
+same state; do not import an object already managed there. Decide whether to
+install fresh or restore data before applying. Preserve recovery backups and
+existing authentication/encryption keys; recreating resources alone does not
+restore the database or application files. Disable any previously scheduled
+cleanup for this installation before recreating resources.
 
 ### 1. Configure non-secret inputs
 
@@ -190,6 +220,26 @@ longer than the Terraform apply. Do not publish an AAAA record unless an IPv6
 frontend has also been configured. TLS provisioning and DNS are installation
 steps, not optional testing shortcuts.
 
+For a domain delegated to Amazon Route 53, leave `endpoint_dns_managed_zone`
+unset. After the apply, run `terraform output application_dns_record` and create
+or update a **simple A record** in the authoritative public hosted zone:
+
+```text
+Record name:  <application_dns_record.name>
+Record type:  A
+Value:        <application_dns_record.value>
+TTL:          300 seconds
+```
+
+Use the record value directly as an IPv4 address, not a Route 53 alias. If the
+record already exists, inspect its current target before replacing it. Confirm
+the domain's nameservers point to that hosted zone. Check propagation with
+`dig +short <application_dns_record.name> A`, then check the certificate with
+`gcloud compute ssl-certificates list` and
+`gcloud compute ssl-certificates describe <managed-certificate-name> --global`.
+The certificate must be `ACTIVE` before HTTPS verification can succeed. The
+Ingress and pods may be healthy while DNS and certificate issuance are pending.
+
 Application image references must be Artifact Registry SHA-256 digests when
 enabling the service; bootstrap placeholders are allowed only while disabled.
 
@@ -242,6 +292,50 @@ during a routine image upgrade.
 ## Private networking
 
 ## GKE deployment modes
+
+### GKE installation sequence
+
+1. Complete the authentication preflight and configure the state backend above.
+   Copy `terraform.tfvars.example` to the ignored `terraform.tfvars` and set the
+   actual project, region, runtime, database sizing, and backend UID/GID.
+2. Set `deployment_mode` to `standard`, `autopilot`, or `shared` and
+   `application_enabled = true`. For shared clusters, also supply the existing
+   cluster and networking inputs described below. Do not use Cloud Run's
+   bootstrap apply or Filestore initialization job for GKE.
+3. Supply both immutable Artifact Registry image references **before** planning.
+   If the approved images already exist, reuse their digests; no copy is needed.
+   Otherwise follow step 5 above to copy them and import the repository only if
+   it is not already in this Terraform state.
+4. Set a customer-owned HTTPS `application_origin`. Supply
+   `endpoint_dns_managed_zone` for installer-managed Cloud DNS, or arrange access
+   to the external DNS provider to publish the resulting A record. A placeholder
+   hostname is not a usable installation endpoint.
+5. Supply the three secret environment variables from step 2 above. For a
+   redeployment, retrieve the retained values securely; do not generate replacement
+   encryption/authentication keys for data you intend to restore.
+6. Initialize, inspect the plan, and apply it:
+
+   ```bash
+   terraform init
+   terraform state list
+   terraform plan -out=deployment.tfplan
+   # Review all creates, updates, replacements and deletions before proceeding.
+   terraform apply deployment.tfplan
+   rm -f deployment.tfplan
+   terraform output application_dns_record
+   ```
+
+7. If DNS is external, publish the printed A record. Wait for DNS and managed TLS
+   issuance, then run `python3 scripts/verify-installation.py` as described in
+   step 7 above. Verify onboarding/login and an actual application workflow before
+   declaring the product installation accepted.
+
+Standard GKE's `gke_node_count` is **per zone** for a regional cluster, not a
+cluster-wide total. Account for that when reviewing cost and capacity. The current
+Terraform configuration also provisions Filestore for GKE, but the bundled chart
+uses a separate persistent volume: scheduled Filestore backups do **not** protect
+that GKE volume. Restoring a previous installation requires a separate, explicit
+database and volume recovery procedure before admitting user traffic.
 
 Choose exactly one `deployment_mode`: `cloud_run`, `standard`, `autopilot`, or
 `shared`. Cloud Run is the default. The GKE values deploy the application
