@@ -39,11 +39,11 @@ The deployed role model reserves **Status** and global **Plugins** and **Schedul
 
 As QA-A test admin in QA-A, create `<run-id>-conn-a` under **Connections**. As QA-B test admin in QA-B, create `<run-id>-conn-b`. For both, select the built-in **Custom** provider (`generic_env`), set description to `Release isolation fixture`, add only non-secret environment value `FEATURE_FLAG=enabled`, add no secret or file values, leave **Test Connection** unused, and save. These fixtures store metadata only; they do not validate an AWS account or provider connectivity. Do not add AWS or GCP credentials to these P0 isolation fixtures.
 
-Record each saved connection's name and current-version identifier in the non-secret test record. Refresh both tenant views and verify that each fixture remains visible only to its owner. Inspect only the ordinary UI or safe response fields to confirm no secret value was stored. If the agent connection picker requires an entitled agent or attachment, create a minimal tenant-local test agent with the same scope in each tenant and record that prerequisite; do not grant cross-tenant access to make the picker test pass.
+Record each saved connection's name and current-version identifier in the non-secret test record. Refresh both tenant views and verify that each fixture remains visible only to its owner. Inspect only the ordinary UI or safe response fields to confirm no secret value was stored. The current UI exposes the connection picker from **Agents → New agent → Connections → Configure** without saving an agent; use its exact-name search for P0-06 and P0-07. If a later release requires an entitled agent or attachment, create a minimal tenant-local test agent with the same scope in each tenant and record that prerequisite; do not grant cross-tenant access to make the picker test pass.
 
 ## Test execution and status record
 
-For each test, set status to **NOT RUN**, **PASS**, **FAIL**, or **BLOCKED**. Record the actual result and evidence reference before marking PASS. Stop immediately if any test exposes another tenant's name, metadata, owner, status, or secret field. Do not perform update, delete, or provider execution probes for P0-08.
+For each test, set status to **NOT RUN**, **IN PROGRESS**, **PASS**, **FAIL**, or **BLOCKED**. Use IN PROGRESS only when part of a test has been observed but its full pass criteria have not been met. Record the actual result and evidence reference before marking PASS. Stop immediately if any test exposes another tenant's name, metadata, owner, status, or secret field. Do not perform update, delete, or provider execution probes for P0-08.
 
 | ID | Test steps | Pass criteria | Status |
 | --- | --- | --- | --- |
