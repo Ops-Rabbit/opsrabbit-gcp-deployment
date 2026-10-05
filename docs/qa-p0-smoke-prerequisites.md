@@ -33,7 +33,7 @@ As the deployment admin, create two active tenants named **QA-A** and **QA-B** u
 
 The earlier run used named employee accounts for some tenant roles. Treat those as historical, not automatic fixtures for a new deployment. Use dedicated QA accounts or obtain explicit approval before assigning an existing person's account. Verify membership in **Tenants** and global role in **Users and Groups**. If license entitlements hide a page, record **BLOCKED** with the entitlement evidence rather than marking it PASS.
 
-The deployed role model reserves **Status** and global **Plugins** and **Scheduler** for the deployment Admin. A tenant's Operator + Tenant Admin can manage tenant Connections but cannot use Status. Accordingly, P0-01 as originally written (QA-A Operator opening Status) is incompatible with these approved identities: record it as FAIL as written, or obtain explicit acceptance to split its checks between QA-A login/tenant context and release-admin Status. For P0-04, use a suitably entitled identity for each page and record which identity was used; do not silently grant the QA Operators deployment Admin or claim a protected page passed under their identity.
+The deployed role model reserves **Status** and global **Plugins** and **Scheduler** for the deployment Admin. A tenant's Operator + Tenant Admin can manage tenant Connections but cannot use Status. From the updated P0-01 definition onward, verify QA-A login and tenant context, then verify that direct `/status` navigation falls back to `/help` without exposing deployment Status. P0-03 checks Status separately as the release admin. Historical P0-01 failures under the older definition remain unchanged; do not retroactively relabel them. For P0-04, use a suitably entitled identity for each page and record which identity was used; do not silently grant the QA Operators deployment Admin or claim a protected page passed under their identity.
 
 ## Connection fixtures
 
@@ -47,9 +47,9 @@ For each test, set status to **NOT RUN**, **IN PROGRESS**, **PASS**, **FAIL**, o
 
 | ID | Test steps | Pass criteria | Status |
 | --- | --- | --- | --- |
-| P0-01 | In a fresh profile, sign in as QA-A test admin and open Status. | Login, app shell, and Status load; active tenant visibly reads QA-A. | NOT RUN |
+| P0-01 | In a fresh profile, sign in as QA-A Operator/Tenant Admin, verify QA-A active, then navigate directly to `/status`. | Login and app shell load with QA-A active; the UI falls back to `/help` without exposing deployment Status. | NOT RUN |
 | P0-02 | Refresh, sign out, open a bookmarked authenticated route, then sign in again as QA-A. | Tenant survives refresh; old session is rejected after sign-out; bookmarked route loads after re-login. | NOT RUN |
-| P0-03 | Check Status and the deployed release against the installation record. | Backend ready; web/backend release matches intended version; no migration failure or repeated crashes. A CI run ID is acceptable only if it is the intended release identifier. | NOT RUN |
+| P0-03 | As deployment Admin, check Status and the deployed release against the installation record. | Backend ready; web/backend release matches intended version; no migration failure or repeated crashes. A CI run ID is acceptable only if it is the intended release identifier. | NOT RUN |
 | P0-04 | Open Chat, Agents, Connections, Plugins, Scheduler, Forms, Knowledge, and Configuration as an entitled account. | Each entitled page loads real content without error banner, redirect loop, or stale-tenant shell. Record genuinely unentitled pages as BLOCKED, not PASS. | NOT RUN |
 | P0-05 | Create the two Custom-provider fixtures above; refresh each Connections page. | Each fixture appears only in its owning tenant; saved data has no secret value. No provider test is run. | NOT RUN |
 | P0-06 | In QA-A, search Connections and the agent connection picker for the exact `conn-b` name. | Zero results; no QA-B name, metadata, owner, status, or secret fields disclosed. | NOT RUN |
