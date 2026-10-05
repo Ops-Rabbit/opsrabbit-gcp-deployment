@@ -32,6 +32,8 @@ Terraform for deploying OpsRabbit on Google Cloud.
 | `gke.tf` | Optional GKE clusters, node pools, shared-cluster lookup, and Helm release |
 | `outputs.tf` | Deployment addresses and resource names |
 | `terraform.tfvars.example` | Secret-free example input; defaults to Cloud Run bootstrap |
+| [`docs/qa-p0-smoke-prerequisites.md`](docs/qa-p0-smoke-prerequisites.md) | Repeatable P0-01 through P0-09 test setup, safe QA credentials, fixtures, and results |
+| [`docs/deployment-follow-up-board.md`](docs/deployment-follow-up-board.md) | Open release, security, recovery, and acceptance follow-ups |
 
 ## Helm deployment
 
@@ -55,6 +57,7 @@ make helm-test
 - Python 3.10+ for offline workflow tests (CI uses 3.12)
 - TFLint 0.64.0 and Trivy 0.74.0 for local lint/security checks
 - An approved OpsRabbit release manifest and read access to OpsRabbit's ECR repositories
+- `crane` and `jq` to copy the immutable ECR image indexes into Artifact Registry without changing their digests
 - Encrypted, access-controlled GCS bucket for Terraform state
 
 ## State and secrets
@@ -71,6 +74,24 @@ terraform {
 
 `BETTER_AUTH_SECRET` and the encryption key must stay stable across
 upgrades.
+
+For a fresh installation after **full teardown**, first verify the bucket named
+in this checkout's `backend.tf` exists. If it was deleted, create a new private
+bucket before `terraform init` (substitute the verified project, bucket and
+region), then enable versioning for state recovery:
+
+```bash
+gcloud storage buckets create gs://STATE_BUCKET --project=PROJECT_ID \
+  --location=REGION --uniform-bucket-level-access \
+  --public-access-prevention --soft-delete-duration=7d
+gcloud storage buckets update gs://STATE_BUCKET --versioning --project=PROJECT_ID
+```
+
+Create it only after checking that neither the bucket nor a previous state
+still exists. Soft delete and versioning retain older state copies and incur
+storage charges; protect access to the bucket because Terraform state contains
+sensitive values. If prior data and backups were deliberately deleted, this is
+a new installation: generate new application secrets and do not claim a restore.
 
 ## Setup
 
@@ -96,13 +117,14 @@ configuration and run `terraform init -reconfigure` against the **same verified
 bucket and prefix**. Do not migrate state or start a new state to bypass an auth
 failure.
 
-Before redeploying after teardown, inspect the existing remote state and cloud
-inventory. Retained registries, images, secrets and networking must remain in the
-same state; do not import an object already managed there. Decide whether to
-install fresh or restore data before applying. Preserve recovery backups and
-existing authentication/encryption keys; recreating resources alone does not
-restore the database or application files. Disable any previously scheduled
-cleanup for this installation before recreating resources.
+Before redeploying after teardown, inspect remote state and cloud inventory.
+Import any still-existing resource that this configuration would manage into
+the verified state before planning; do not create a duplicate or import an object
+already in state. Decide whether to install fresh or restore data before applying.
+Preserve recovery backups and authentication/encryption keys **only when restoring
+their associated data**; recreating resources alone does not restore the database
+or application files. Disable any previously scheduled cleanup for this
+installation before recreating resources.
 
 ### 1. Configure non-secret inputs
 
@@ -150,7 +172,10 @@ gcloud run jobs execute "$(terraform output -raw filestore_init_job_name)" \
 ### 5. Import the OpsRabbit images
 
 For the approved ECR release, use the copy script after authenticating AWS and
-gcloud and starting Docker:
+gcloud. It uses `crane` (no Docker daemon) to preserve each published OCI index
+and verify the destination digest. The current product image workflow publishes
+`vg-backend` and `vg-webapp`; set `BACKEND_ECR_REPO` or `WEB_ECR_REPO` only when
+the approved manifest identifies different repositories:
 
 ```bash
 export PROJECT_ID=my-gcp-project ECR_ACCOUNT_ID=123456789012
@@ -161,10 +186,19 @@ REGION=us-central1 REPOSITORY=opsrabbit ./scripts/copy-ecr-to-gar.sh
 
 Set `AWS_PROFILE` if using a named AWS profile. Supply `PROJECT_ID`, `ECR_ACCOUNT_ID`,
 `BACKEND_DIGEST`, and `WEB_DIGEST` explicitly for the approved release. It checks
-both ECR digests, enables Artifact Registry, creates
-the Docker repository if missing, copies `linux/amd64` images, and verifies exact
-destination digest equality. Temporary Docker credentials are deleted on exit.
+both ECR digests, enables Artifact Registry, creates the Docker repository if
+missing, verifies `linux/amd64` availability, copies the complete image indexes,
+and verifies exact destination digest equality. Temporary registry credentials
+are deleted on exit.
 It prints immutable Terraform image references and does not deploy the app.
+Large layers may overwhelm a workstation upload connection. If the copy fails,
+run the same digest-preserving `crane cp` commands from a short-lived Cloud Build
+job in the destination region. Supply the ECR login through a temporary Secret
+Manager secret, grant the build identity only temporary secret-read and GAR-write
+permissions, verify both destination digests, then revoke the writer permission
+and delete the temporary secret. Never put an ECR token in a build substitution,
+source file, command argument, or log. A failed copy must not be treated as a
+published release merely because some layers landed in Artifact Registry.
 
 If running this **before the infrastructure bootstrap**, import the newly created
 repository into the initialized Terraform backend and generate a fresh plan:
@@ -389,6 +423,18 @@ external chart, set `gke_helm_repository` to an HTTPS repository and provide a
 pinned `gke_helm_chart_version`. The chart receives immutable backend and web
 image references, the Workload Identity service account, runtime UID/GID, and
 the database/application secrets through Helm values.
+For the currently published web image, built assets are at
+`/usr/share/nginx/html` and its Nginx HTTP template listens on port 80. Chart
+0.2.3 copies those files into writable pod volumes and adapts the template to
+its unprivileged default port 8080; its Service and GKE health check use that
+same port. Keep `web.containerPort` aligned if a future image changes its
+listener, and run `make helm-test` before deployment. The chart fixes do not
+require rebuilding or retagging the published images. The chart defaults to
+two web replicas with a disruption budget so a voluntary Autopilot node move
+does not leave the public load balancer without a web endpoint. One backend
+replica remains because its application PVC uses ReadWriteOnce; this is not a
+fully highly available installation, and production availability requires a
+reviewed shared-storage or stateless backend design.
 Standard mode provisions a dedicated node service account with only Artifact
 Registry pull access when `gke_node_service_account` is not supplied. Shared
 and Autopilot modes use the cluster's existing node identity configuration.

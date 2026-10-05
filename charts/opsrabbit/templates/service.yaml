@@ -48,7 +48,7 @@ spec:
   ports:
     - name: http
       port: {{ .Values.web.servicePort }}
-      targetPort: http
+      targetPort: {{ .Values.web.containerPort }}
       protocol: TCP
   selector:
     {{- include "opsrabbit.selectorLabels" . | nindent 4 }}

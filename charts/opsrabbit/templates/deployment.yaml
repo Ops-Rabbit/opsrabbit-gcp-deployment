@@ -203,6 +203,8 @@ spec:
               mountPath: /usr/share/nginx/html
             - name: nginx-conf
               mountPath: /etc/nginx/conf.d
+            - name: nginx-templates
+              mountPath: /etc/nginx/templates
             - name: nginx-cache
               mountPath: /var/cache/nginx
             - name: nginx-run
@@ -214,20 +216,31 @@ spec:
           command:
             - /bin/sh
             - -c
-            - cp -a /opt/opsrabbit/html/. /usr/share/nginx/html/
+            - |
+              set -eu
+              cp -a /usr/share/nginx/html/. /mnt/web-html/
+              cp -a /etc/nginx/templates/. /mnt/nginx-templates/
+              for template in /mnt/nginx-templates/*.template; do
+                sed -i -e 's/listen 80;/listen {{ .Values.web.containerPort }};/g' \
+                  -e 's/listen \[::\]:80;/listen [::]:{{ .Values.web.containerPort }};/g' "$template"
+              done
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           resources:
             {{- toYaml .Values.resources.web | nindent 12 }}
           volumeMounts:
             - name: web-html
-              mountPath: /usr/share/nginx/html
+              mountPath: /mnt/web-html
+            - name: nginx-templates
+              mountPath: /mnt/nginx-templates
       volumes:
         - name: tmp
           emptyDir: {}
         - name: web-html
           emptyDir: {}
         - name: nginx-conf
+          emptyDir: {}
+        - name: nginx-templates
           emptyDir: {}
         - name: nginx-cache
           emptyDir: {}

@@ -48,6 +48,21 @@ class HelmChartTests(unittest.TestCase):
         self.assertEqual(self.rendered.count("kind: Service\n"), 2)
         self.assertIn("kind: PersistentVolumeClaim", self.rendered)
 
+    def test_web_replica_availability_defaults(self):
+        web = next(
+            doc for doc in self.rendered.split("---")
+            if "kind: Deployment\n" in doc and "component: web" in doc
+        )
+        pdb = next(
+            doc for doc in self.rendered.split("---")
+            if "kind: PodDisruptionBudget\n" in doc
+        )
+        self.assertIn("replicas: 2", web)
+        self.assertIn("minAvailable: 1", pdb)
+        self.assertIn("component: web", pdb)
+        self.assertNotIn("component: backend", pdb)
+        self.assertNotIn("kind: PodDisruptionBudget\n", self.render("--set", "replicaCount.web=1"))
+
     def test_rendered_workloads_have_security_and_health_defaults(self):
         self.assertEqual(self.rendered.count("runAsNonRoot: true"), 2)
         self.assertEqual(self.rendered.count("runAsUser: 10001"), 2)
@@ -125,6 +140,43 @@ class HelmChartTests(unittest.TestCase):
         ingress = next(doc for doc in rendered.split("---") if "kind: Ingress\n" in doc)
         self.assertIn("name: opsrabbit-opsrabbit-web", ingress)
         self.assertNotIn("name: opsrabbit-opsrabbit-backend", ingress)
+
+    def test_web_assets_and_ports_match_published_image(self):
+        web = next(
+            doc for doc in self.rendered.split("---")
+            if "kind: Deployment\n" in doc and "component: web" in doc
+        )
+        service = next(
+            doc for doc in self.rendered.split("---")
+            if "kind: Service\n" in doc and "component: web" in doc
+        )
+        self.assertIn("cp -a /usr/share/nginx/html/. /mnt/web-html/", web)
+        self.assertIn("mountPath: /mnt/web-html", web)
+        self.assertIn("cp -a /etc/nginx/templates/. /mnt/nginx-templates/", web)
+        self.assertIn("mountPath: /mnt/nginx-templates", web)
+        self.assertIn("mountPath: /etc/nginx/templates", web)
+        self.assertIn("listen 8080;", web)
+        self.assertIn("containerPort: 8080", web)
+        self.assertIn("targetPort: 8080", service)
+
+        overridden = self.render(
+            "--set", "web.containerPort=9090",
+            "--set", "gkeEndpoint.enabled=true",
+            "--set", "gkeEndpoint.staticIpName=application-ip",
+            "--set", "gkeEndpoint.certificateNames=application-cert",
+            "--set", "gkeEndpoint.sslPolicy=application-tls",
+        )
+        overridden_service = next(
+            doc for doc in overridden.split("---")
+            if "kind: Service\n" in doc and "component: web" in doc
+        )
+        backend_config = next(
+            doc for doc in overridden.split("---")
+            if "kind: BackendConfig\n" in doc
+        )
+        self.assertIn("containerPort: 9090", overridden)
+        self.assertIn("targetPort: 9090", overridden_service)
+        self.assertIn("port: 9090", backend_config)
 
 
 if __name__ == "__main__":
