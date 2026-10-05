@@ -2,6 +2,9 @@ project_id  = "my-gcp-project"
 region      = "us-central1"
 name_prefix = "opsrabbit"
 
+# Choose exactly one deployment target: cloud_run, standard, autopilot, or shared.
+deployment_mode = "cloud_run"
+
 # ---- Networking ----
 # A VPC is always created/used now (Filestore has no public-IP mode), and
 # Cloud SQL is always private IP only as a result. Terraform itself never
@@ -46,8 +49,9 @@ backend_gid = 1000
 # Replace this with a routed custom domain or the deterministic Cloud Run URL.
 application_origin = "https://opsrabbit.example.com"
 
-# Keep false for the bootstrap apply; flip to true once images are imported
-# AND NFS write access has been verified (see README).
+# Cloud Run only: keep false for bootstrap, then enable after importing images
+# and verifying NFS write access. For GKE use true and provide real image digests
+# and origin before the first plan; false does not disable the GKE Helm release.
 application_enabled = false
 
 # postgresql_administrator_password, better_auth_secret, and

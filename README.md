@@ -10,7 +10,7 @@ Terraform for deploying OpsRabbit on Google Cloud.
 | Pull identity | Service account + `roles/artifactregistry.reader` |
 | Persistent storage | Filestore instance, four subdirectories mounted into Cloud Run as separate NFS volumes (`.opsrabbit`, `git`, `.agent-browser`, `.codex` under `/home/opsbot`) |
 | Database | Cloud SQL for PostgreSQL 16, with the `vector` extension |
-| Compute | Cloud Run v2 service running `web` (ingress), `backend`, and a private-IP Cloud SQL Auth Proxy |
+| Compute | Cloud Run v2 service running `web` (ingress), `backend`, and a private-IP Cloud SQL Auth Proxy; or optional GKE Standard, shared-cluster, and Autopilot deployment |
 | File backups | Daily Workflows + Cloud Scheduler backups; 14-day retention |
 | Secrets | Secret Manager (DB URL, `BETTER_AUTH_SECRET`, `OPSRABBIT_NODE_ENCRYPTION_KEY`) |
 | Networking | Dedicated VPC + subnet, Direct VPC egress from Cloud Run to Filestore |
@@ -29,7 +29,11 @@ Terraform for deploying OpsRabbit on Google Cloud.
 | `secrets.tf` | Secret Manager secrets |
 | `cloud-run.tf` | The Cloud Run v2 service |
 | `private-ingress.tf` | Optional internal HTTPS load balancer and source allowlist |
+| `gke.tf` | Optional GKE clusters, node pools, shared-cluster lookup, and Helm release |
 | `outputs.tf` | Deployment addresses and resource names |
+| `terraform.tfvars.example` | Secret-free example input; defaults to Cloud Run bootstrap |
+| [`docs/qa-p0-smoke-prerequisites.md`](docs/qa-p0-smoke-prerequisites.md) | Repeatable P0-01 through P0-09 test setup, safe QA credentials, fixtures, and results |
+| [`docs/deployment-follow-up-board.md`](docs/deployment-follow-up-board.md) | Open release, security, recovery, and acceptance follow-ups |
 
 ## Helm deployment
 
@@ -43,7 +47,6 @@ Run the chart checks locally with:
 ```bash
 make helm-test
 ```
-| `terraform.tfvars.example` | Secret-free example input |
 
 ## Prerequisites
 
@@ -54,6 +57,7 @@ make helm-test
 - Python 3.10+ for offline workflow tests (CI uses 3.12)
 - TFLint 0.64.0 and Trivy 0.74.0 for local lint/security checks
 - An approved OpsRabbit release manifest and read access to OpsRabbit's ECR repositories
+- `crane` and `jq` to copy the immutable ECR image indexes into Artifact Registry without changing their digests
 - Encrypted, access-controlled GCS bucket for Terraform state
 
 ## State and secrets
@@ -71,7 +75,56 @@ terraform {
 `BETTER_AUTH_SECRET` and the encryption key must stay stable across
 upgrades.
 
+For a fresh installation after **full teardown**, first verify the bucket named
+in this checkout's `backend.tf` exists. If it was deleted, create a new private
+bucket before `terraform init` (substitute the verified project, bucket and
+region), then enable versioning for state recovery:
+
+```bash
+gcloud storage buckets create gs://STATE_BUCKET --project=PROJECT_ID \
+  --location=REGION --uniform-bucket-level-access \
+  --public-access-prevention --soft-delete-duration=7d
+gcloud storage buckets update gs://STATE_BUCKET --versioning --project=PROJECT_ID
+```
+
+Create it only after checking that neither the bucket nor a previous state
+still exists. Soft delete and versioning retain older state copies and incur
+storage charges; protect access to the bucket because Terraform state contains
+sensitive values. If prior data and backups were deliberately deleted, this is
+a new installation: generate new application secrets and do not claim a restore.
+
 ## Setup
+
+Choose exactly one runtime before applying. Steps 3–6 below describe **Cloud Run**
+bootstrap. For `standard`, `autopilot`, or `shared`, follow the
+[GKE installation sequence](#gke-installation-sequence) instead: GKE installs the
+Helm release immediately, even when `application_enabled = false`.
+
+### Authentication preflight (all runtimes)
+
+```bash
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+gcloud auth application-default login
+gcloud auth print-access-token >/dev/null
+```
+
+The CLI login and Application Default Credentials used by Terraform are separate.
+Use your organization's approved workload identity credentials instead for CI.
+Never put access tokens in `backend.tf`, Terraform variables, or Git. If an earlier
+initialization cached an expired backend token, remove that token from backend
+configuration and run `terraform init -reconfigure` against the **same verified
+bucket and prefix**. Do not migrate state or start a new state to bypass an auth
+failure.
+
+Before redeploying after teardown, inspect remote state and cloud inventory.
+Import any still-existing resource that this configuration would manage into
+the verified state before planning; do not create a duplicate or import an object
+already in state. Decide whether to install fresh or restore data before applying.
+Preserve recovery backups and authentication/encryption keys **only when restoring
+their associated data**; recreating resources alone does not restore the database
+or application files. Disable any previously scheduled cleanup for this
+installation before recreating resources.
 
 ### 1. Configure non-secret inputs
 
@@ -119,7 +172,10 @@ gcloud run jobs execute "$(terraform output -raw filestore_init_job_name)" \
 ### 5. Import the OpsRabbit images
 
 For the approved ECR release, use the copy script after authenticating AWS and
-gcloud and starting Docker:
+gcloud. It uses `crane` (no Docker daemon) to preserve each published OCI index
+and verify the destination digest. The current product image workflow publishes
+`vg-backend` and `vg-webapp`; set `BACKEND_ECR_REPO` or `WEB_ECR_REPO` only when
+the approved manifest identifies different repositories:
 
 ```bash
 export PROJECT_ID=my-gcp-project ECR_ACCOUNT_ID=123456789012
@@ -130,10 +186,19 @@ REGION=us-central1 REPOSITORY=opsrabbit ./scripts/copy-ecr-to-gar.sh
 
 Set `AWS_PROFILE` if using a named AWS profile. Supply `PROJECT_ID`, `ECR_ACCOUNT_ID`,
 `BACKEND_DIGEST`, and `WEB_DIGEST` explicitly for the approved release. It checks
-both ECR digests, enables Artifact Registry, creates
-the Docker repository if missing, copies `linux/amd64` images, and verifies exact
-destination digest equality. Temporary Docker credentials are deleted on exit.
+both ECR digests, enables Artifact Registry, creates the Docker repository if
+missing, verifies `linux/amd64` availability, copies the complete image indexes,
+and verifies exact destination digest equality. Temporary registry credentials
+are deleted on exit.
 It prints immutable Terraform image references and does not deploy the app.
+Large layers may overwhelm a workstation upload connection. If the copy fails,
+run the same digest-preserving `crane cp` commands from a short-lived Cloud Build
+job in the destination region. Supply the ECR login through a temporary Secret
+Manager secret, grant the build identity only temporary secret-read and GAR-write
+permissions, verify both destination digests, then revoke the writer permission
+and delete the temporary secret. Never put an ECR token in a build substitution,
+source file, command argument, or log. A failed copy must not be treated as a
+published release merely because some layers landed in Artifact Registry.
 
 If running this **before the infrastructure bootstrap**, import the newly created
 repository into the initialized Terraform backend and generate a fresh plan:
@@ -169,13 +234,45 @@ Set `backend_image` / `web_image` in `terraform.tfvars` to the resulting
 ### 6. Configure the origin and deploy
 
 Set `application_origin` to the HTTPS origin clients will actually use, without
-an API path or trailing slash. It is required when enabling the service. For a
-custom domain, provision DNS and HTTPS routing separately; this module does not
-create public domain mappings or a public load balancer. Private mode provisions
-an internal load balancer as described below. To use Cloud Run's deterministic URL,
+an API path, explicit port or trailing slash. It is required for application installation
+in every runtime. Public custom domains receive an installer-managed static IP,
+HTTPS load balancer, TLS 1.2+ policy and HTTP-to-HTTPS redirect. By default the
+installer requests a Google-managed certificate. Supply
+`endpoint_ssl_certificate_self_links` to use existing global Compute SSL
+certificates instead. Private Cloud Run mode provisions an internal load balancer
+as described below. To use Cloud Run's deterministic URL without a separate load balancer,
 obtain the project number with `gcloud projects describe PROJECT_ID
 --format='value(projectNumber)'` and use
 `https://NAME_PREFIX-app-PROJECT_NUMBER.REGION.run.app`.
+
+Set `endpoint_dns_managed_zone` to an existing public Cloud DNS zone in the
+deployment project to create the A record automatically. With external DNS,
+create the record printed by `application_dns_record`; the installer cannot
+modify an external DNS provider without its credentials. Google-managed
+certificate issuance waits for DNS to resolve to the load balancer and can take
+longer than the Terraform apply. Do not publish an AAAA record unless an IPv6
+frontend has also been configured. TLS provisioning and DNS are installation
+steps, not optional testing shortcuts.
+
+For a domain delegated to Amazon Route 53, leave `endpoint_dns_managed_zone`
+unset. After the apply, run `terraform output application_dns_record` and create
+or update a **simple A record** in the authoritative public hosted zone:
+
+```text
+Record name:  <application_dns_record.name>
+Record type:  A
+Value:        <application_dns_record.value>
+TTL:          300 seconds
+```
+
+Use the record value directly as an IPv4 address, not a Route 53 alias. If the
+record already exists, inspect its current target before replacing it. Confirm
+the domain's nameservers point to that hosted zone. Check propagation with
+`dig +short <application_dns_record.name> A`, then check the certificate with
+`gcloud compute ssl-certificates list` and
+`gcloud compute ssl-certificates describe <managed-certificate-name> --global`.
+The certificate must be `ACTIVE` before HTTPS verification can succeed. The
+Ingress and pods may be healthy while DNS and certificate issuance are pending.
 
 Application image references must be Artifact Registry SHA-256 digests when
 enabling the service; bootstrap placeholders are allowed only while disabled.
@@ -206,6 +303,19 @@ frontend HTML, so an HTTP 200 there does not establish backend health.
 curl --fail --show-error "$(terraform output -raw opsrabbit_url)/api/health"
 ```
 
+Run the endpoint readiness check from a machine with access to the application:
+
+```bash
+python3 scripts/verify-installation.py
+```
+
+It waits up to 30 minutes for valid HTTPS, an HTML web UI, JSON backend health
+with `ok: true`, and the public custom-domain HTTP redirect. It exits nonzero
+when those checks fail and never bypasses certificate validation. Use `--timeout`
+to set a different bound. Endpoint readiness does not establish that administrator
+onboarding, login, integrations, storage recovery or agent workflows have passed;
+those require acceptance testing against the approved product release.
+
 ## Upgrades
 
 Get the next approved release manifest, re-import both digests, update
@@ -214,6 +324,158 @@ Filestore, `BETTER_AUTH_SECRET`, the encryption key, or `network_mode`
 during a routine image upgrade.
 
 ## Private networking
+
+## GKE deployment modes
+
+### GKE installation sequence
+
+1. Complete the authentication preflight and configure the state backend above.
+   Copy `terraform.tfvars.example` to the ignored `terraform.tfvars` and set the
+   actual project, region, runtime, database sizing, and backend UID/GID.
+2. Set `deployment_mode` to `standard`, `autopilot`, or `shared` and
+   `application_enabled = true`. For shared clusters, also supply the existing
+   cluster and networking inputs described below. Do not use Cloud Run's
+   bootstrap apply or Filestore initialization job for GKE.
+3. Supply both immutable Artifact Registry image references **before** planning.
+   If the approved images already exist, reuse their digests; no copy is needed.
+   Otherwise follow step 5 above to copy them and import the repository only if
+   it is not already in this Terraform state.
+4. Set a customer-owned HTTPS `application_origin`. Supply
+   `endpoint_dns_managed_zone` for installer-managed Cloud DNS, or arrange access
+   to the external DNS provider to publish the resulting A record. A placeholder
+   hostname is not a usable installation endpoint.
+5. Supply the three secret environment variables from step 2 above. For a
+   redeployment, retrieve the retained values securely; do not generate replacement
+   encryption/authentication keys for data you intend to restore.
+6. Initialize, inspect the plan, and apply it:
+
+   ```bash
+   terraform init
+   terraform state list
+   terraform plan -out=deployment.tfplan
+   # Review all creates, updates, replacements and deletions before proceeding.
+   terraform apply deployment.tfplan
+   rm -f deployment.tfplan
+   terraform output application_dns_record
+   ```
+
+7. If DNS is external, publish the printed A record. Wait for DNS and managed TLS
+   issuance, then run `python3 scripts/verify-installation.py` as described in
+   step 7 above. Verify onboarding/login and an actual application workflow before
+   declaring the product installation accepted.
+
+Standard GKE's `gke_node_count` is **per zone** for a regional cluster, not a
+cluster-wide total. Account for that when reviewing cost and capacity. The current
+Terraform configuration also provisions Filestore for GKE, but the bundled chart
+uses a separate persistent volume: scheduled Filestore backups do **not** protect
+that GKE volume. Restoring a previous installation requires a separate, explicit
+database and volume recovery procedure before admitting user traffic.
+
+Choose exactly one `deployment_mode`: `cloud_run`, `standard`, `autopilot`, or
+`shared`. Cloud Run is the default. The GKE values deploy the application
+through the OpsRabbit Helm chart and do not create Cloud Run resources:
+
+All four modes accept the same public endpoint inputs and return `opsrabbit_url`.
+For example, select a runtime and supply customer installation settings:
+
+```hcl
+deployment_mode           = "standard" # cloud_run, standard, autopilot, shared
+application_enabled       = true
+application_origin        = "https://opsrabbit.customer.example"
+endpoint_dns_managed_zone = "customer-public-zone"
+```
+
+Project, image digests and secrets are still required as shown in the full
+example file. Customers do not need to choose a Kubernetes Service type,
+Ingress class, certificate annotation or backend URL. The installer configures
+those from the application origin. Only the web service is routed publicly;
+the backend always remains a ClusterIP service. GKE's controller manages its
+load balancer through the chart's Ingress, FrontendConfig and BackendConfig.
+The load-balancer health check exercises `/api/health` through the web proxy.
+
+- `standard` creates a GKE Standard cluster and an auto-repairing,
+  auto-upgrading node pool. Use `gke_network_self_link` and
+  `gke_subnetwork_self_link` to place it in an existing VPC, or let it use the
+  module's VPC and subnet.
+- `autopilot` creates a GKE Autopilot cluster and lets GKE manage nodes.
+- `shared` looks up an existing cluster using the required
+  `gke_cluster_name` and `gke_cluster_location` values. Terraform does not
+  modify or delete that cluster.
+
+Shared mode additionally requires `create_vpc=false`, the cluster's VPC in
+`existing_network_self_link`, and a suitable existing subnet in
+`existing_subnet_self_link`. Plan-time checks require a VPC-native cluster,
+Workload Identity for the deployment project and the HTTP load-balancing add-on.
+The installation identity must reach the Kubernetes API and be allowed to create
+namespace resources, including Ingress/FrontendConfig/BackendConfig. The existing
+node identity must be able to pull the supplied private images, and cluster policy
+must allow load-balancer health checks and traffic to the web pods. The installer
+does not reconfigure the customer's cluster or its organization policies.
+
+Private GKE endpoint provisioning is not implemented and is rejected explicitly;
+private access currently supports Cloud Run only. Public endpoint provisioning
+covers all four runtime choices. A change of runtime on an existing installation
+is a migration and is not equivalent to a fresh installation.
+
+GKE uses the chart bundled at `charts/opsrabbit` by default, so the first
+deployment can use the local chart path without publishing a chart. To use an
+external chart, set `gke_helm_repository` to an HTTPS repository and provide a
+pinned `gke_helm_chart_version`. The chart receives immutable backend and web
+image references, the Workload Identity service account, runtime UID/GID, and
+the database/application secrets through Helm values.
+For the currently published web image, built assets are at
+`/usr/share/nginx/html` and its Nginx HTTP template listens on port 80. Chart
+0.2.3 copies those files into writable pod volumes and adapts the template to
+its unprivileged default port 8080; its Service and GKE health check use that
+same port. Keep `web.containerPort` aligned if a future image changes its
+listener, and run `make helm-test` before deployment. The chart fixes do not
+require rebuilding or retagging the published images. The chart defaults to
+two web replicas with a disruption budget so a voluntary Autopilot node move
+does not leave the public load balancer without a web endpoint. One backend
+replica remains because its application PVC uses ReadWriteOnce; this is not a
+fully highly available installation, and production availability requires a
+reviewed shared-storage or stateless backend design.
+Standard mode provisions a dedicated node service account with only Artifact
+Registry pull access when `gke_node_service_account` is not supplied. Shared
+and Autopilot modes use the cluster's existing node identity configuration.
+GKE connects to Cloud SQL over its private IP with TLS; set
+`gke_postgresql_host` when a shared cluster reaches the database through a
+customer-managed hostname or proxy. Ensure the selected cluster network can
+route to the Cloud SQL private service access range.
+Keep Terraform state in an encrypted, access-controlled GCS backend. The
+`gke_helm_values` map is intentionally for non-secret overrides only.
+
+An existing public GKE installation cannot switch directly to `cloud_run` on
+the same hostname and reserved IP. The GKE Ingress and Cloud Run load balancer
+both need ports 80/443 on that IP; asynchronous GKE cleanup makes a single
+Terraform apply race and may leave the endpoint down. Treat a runtime switch as
+a separately planned migration with an expected endpoint outage:
+
+1. While `deployment_mode` is still `standard`, `autopilot`, or `shared`, apply
+   `gke_endpoint_detach_for_migration=true`. For a module-created cluster, also
+   apply `gke_deletion_protection=false` in this preparatory step. The Helm
+   release stays installed, but its GKE Ingress is removed; the static IP and
+   certificate remain in Terraform state. Do not run the next apply until this
+   one succeeds.
+2. Confirm the old Ingress is gone and **no global forwarding rule still owns
+   the reserved IP**. GKE load-balancer cleanup can continue after Helm reports
+   success. Obtain the address with `terraform output -raw
+   public_load_balancer_ip`, then inspect `gcloud compute forwarding-rules list
+   --global --project=PROJECT_ID --format=json` for that exact `IPAddress`.
+   Recheck until none remain; do not remove an unrelated forwarding rule.
+3. Change `deployment_mode` to `cloud_run`, reset
+   `gke_endpoint_detach_for_migration=false`, and apply. Preserve the old
+   cluster connection for Helm release teardown with
+   `helm_kubernetes_host_override`,
+   `helm_kubernetes_ca_certificate_override`, and
+   `helm_kubernetes_token_override` when the runner has no kubeconfig for it.
+   Remove those teardown-only overrides in a later apply. Run the endpoint
+   verifier and product smoke tests before declaring the migration complete.
+
+Do not use this procedure as a zero-downtime migration. For uninterrupted
+cutover, stage Cloud Run on a different IP/hostname and plan DNS traffic
+transition separately. A new customer installation should simply select one
+runtime and does not need the migration flag.
 
 For VPN-only access, use [`private.tfvars.example`](private.tfvars.example). Private mode provisions an
 internal HTTPS load balancer and source allowlist while disabling direct

@@ -1,6 +1,6 @@
 replicaCount:
   backend: 1
-  web: 1
+  web: 2
 
 image:
   backend: ""
@@ -82,6 +82,13 @@ ingress:
         - path: /
           pathType: Prefix
   tls: []
+
+# Populated by the Terraform installer for a public GKE application endpoint.
+gkeEndpoint:
+  enabled: false
+  staticIpName: ""
+  certificateNames: ""
+  sslPolicy: ""
 
 secrets:
   existingSecret: ""
