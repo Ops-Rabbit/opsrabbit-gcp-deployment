@@ -3,7 +3,7 @@ locals {
   # Cloud Run's native HTTPS URL remains usable without provisioning a load balancer.
   public_endpoint_enabled      = var.network_mode == "public" && (local.cloud_run_enabled || local.gke_enabled) && var.application_origin != null && !try(endswith(var.application_origin, ".run.app"), false)
   public_cloud_run_endpoint    = local.public_endpoint_enabled && local.cloud_run_enabled
-  public_gke_endpoint          = local.public_endpoint_enabled && local.gke_enabled
+  public_gke_endpoint          = local.public_endpoint_enabled && local.gke_enabled && !var.gke_endpoint_detach_for_migration
   public_endpoint_hostname     = var.application_origin == null ? "" : trimprefix(var.application_origin, "https://")
   public_endpoint_certificates = length(var.endpoint_ssl_certificate_self_links) > 0 ? var.endpoint_ssl_certificate_self_links : google_compute_managed_ssl_certificate.application[*].self_link
 }

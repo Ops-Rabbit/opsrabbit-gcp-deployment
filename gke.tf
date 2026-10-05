@@ -11,6 +11,9 @@ locals {
 data "google_compute_default_service_account" "default" {
   count   = var.deployment_mode == "autopilot" ? 1 : 0
   project = var.project_id
+
+  # A fresh project cannot read this identity until Compute Engine is enabled.
+  depends_on = [google_project_service.required["compute.googleapis.com"]]
 }
 
 resource "google_service_account" "gke_node" {

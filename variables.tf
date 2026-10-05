@@ -389,6 +389,17 @@ variable "gke_deletion_protection" {
   default     = true
 }
 
+variable "gke_endpoint_detach_for_migration" {
+  description = "Temporarily remove the GKE Ingress while retaining its static IP and certificate before a planned GKE-to-Cloud-Run migration. This causes an expected endpoint outage until the new load balancer is ready."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.gke_endpoint_detach_for_migration || contains(["standard", "autopilot", "shared"], var.deployment_mode)
+    error_message = "gke_endpoint_detach_for_migration is only valid while deployment_mode remains standard, autopilot, or shared."
+  }
+}
+
 variable "helm_kubernetes_host_override" {
   description = "Kubernetes API endpoint to use while Terraform tears down a previous GKE Helm release during a deployment_mode switch. Capture it before switching to cloud_run."
   type        = string

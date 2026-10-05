@@ -22,7 +22,7 @@ The public endpoint prerequisite passed: valid managed TLS, web HTML, `/api/heal
 | P0-02 | Refresh, sign out, bookmarked route, sign in again | Tenant persists; old session rejected; direct route loads | PASS | QA-A and its Custom fixture persisted after refresh. Sign-out redirected to `/login`; bookmarked `/configuration/connections` redirected to `/login?next=%2Fconfiguration%2Fconnections`. QA-A re-login restored that route with QA-A selected and the fixture still present. |
 | P0-03 | Status, versions, migrations, crashes | Healthy backend and intended matching release | NOT RUN | Endpoint prerequisite alone is insufficient |
 | P0-04 | Chat, Agents, Connections, Plugins, Scheduler, Forms, Knowledge, Configuration | Every entitled page loads real content | NOT RUN | |
-| P0-05 | Create Custom connection in each tenant; refresh | Only owner sees own non-secret fixture | NOT RUN | Use `qa-20261005-autopilot-conn-a` and `qa-20261005-autopilot-conn-b` |
+| P0-05 | Create Custom connection in each tenant; refresh | Only owner sees own non-secret fixture | NOT RUN | QA-A Custom `qa-20261005-autopilot-conn-a` saved and persisted after refresh, with description `Release isolation fixture` and only non-secret `FEATURE_FLAG=enabled`; Test Connection was not used. QA-B fixture and cross-tenant visibility remain pending. |
 | P0-06 | QA-A search Connections and agent picker for conn-b | Zero results, no QA-B disclosure | NOT RUN | |
 | P0-07 | QA-B search Connections and agent picker for conn-a | Zero results, no QA-A disclosure | NOT RUN | |
 | P0-08 | QA-A normal read for QA-B connection identifier | Resource hiding, normally 404; no metadata | NOT RUN | No write or delete probes |

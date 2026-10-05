@@ -445,16 +445,37 @@ route to the Cloud SQL private service access range.
 Keep Terraform state in an encrypted, access-controlled GCS backend. The
 `gke_helm_values` map is intentionally for non-secret overrides only.
 
-When switching an existing GKE deployment back to `cloud_run`, preserve the
-old cluster connection for the Helm release teardown by supplying
-`helm_kubernetes_host_override`, `helm_kubernetes_ca_certificate_override`,
-and `helm_kubernetes_token_override` from the existing cluster in that apply.
-This is required when the runner does not have a kubeconfig for the old
-cluster; the overrides are teardown-only and can be removed on the next apply.
-For module-created Standard or Autopilot clusters, first apply the current GKE
-mode with `gke_deletion_protection=false`, then apply `cloud_run` with those
-teardown overrides. This two-phase sequence prevents accidental cluster
-deletion while allowing the selected mode to change safely.
+An existing public GKE installation cannot switch directly to `cloud_run` on
+the same hostname and reserved IP. The GKE Ingress and Cloud Run load balancer
+both need ports 80/443 on that IP; asynchronous GKE cleanup makes a single
+Terraform apply race and may leave the endpoint down. Treat a runtime switch as
+a separately planned migration with an expected endpoint outage:
+
+1. While `deployment_mode` is still `standard`, `autopilot`, or `shared`, apply
+   `gke_endpoint_detach_for_migration=true`. For a module-created cluster, also
+   apply `gke_deletion_protection=false` in this preparatory step. The Helm
+   release stays installed, but its GKE Ingress is removed; the static IP and
+   certificate remain in Terraform state. Do not run the next apply until this
+   one succeeds.
+2. Confirm the old Ingress is gone and **no global forwarding rule still owns
+   the reserved IP**. GKE load-balancer cleanup can continue after Helm reports
+   success. Obtain the address with `terraform output -raw
+   public_load_balancer_ip`, then inspect `gcloud compute forwarding-rules list
+   --global --project=PROJECT_ID --format=json` for that exact `IPAddress`.
+   Recheck until none remain; do not remove an unrelated forwarding rule.
+3. Change `deployment_mode` to `cloud_run`, reset
+   `gke_endpoint_detach_for_migration=false`, and apply. Preserve the old
+   cluster connection for Helm release teardown with
+   `helm_kubernetes_host_override`,
+   `helm_kubernetes_ca_certificate_override`, and
+   `helm_kubernetes_token_override` when the runner has no kubeconfig for it.
+   Remove those teardown-only overrides in a later apply. Run the endpoint
+   verifier and product smoke tests before declaring the migration complete.
+
+Do not use this procedure as a zero-downtime migration. For uninterrupted
+cutover, stage Cloud Run on a different IP/hostname and plan DNS traffic
+transition separately. A new customer installation should simply select one
+runtime and does not need the migration flag.
 
 For VPN-only access, use [`private.tfvars.example`](private.tfvars.example). Private mode provisions an
 internal HTTPS load balancer and source allowlist while disabling direct

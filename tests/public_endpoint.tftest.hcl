@@ -99,6 +99,23 @@ run "autopilot_has_same_endpoint_contract" {
   }
 }
 
+run "gke_migration_detaches_ingress_before_reusing_static_ip" {
+  command = plan
+  variables {
+    deployment_mode                   = "autopilot"
+    gke_endpoint_detach_for_migration = true
+  }
+  assert {
+    condition = (
+      length(google_compute_global_address.application) == 1 &&
+      length(google_compute_global_forwarding_rule.application_https) == 0 &&
+      !yamldecode(helm_release.opsrabbit[0].values[1]).ingress.enabled &&
+      !yamldecode(helm_release.opsrabbit[0].values[1]).gkeEndpoint.enabled
+    )
+    error_message = "The preparatory migration apply must remove GKE Ingress while retaining the reserved address."
+  }
+}
+
 run "shared_installs_endpoint_without_owning_cluster" {
   command = plan
   variables {
