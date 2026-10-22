@@ -30,7 +30,7 @@ variable "labels" {
 # source restrictions and no direct run.app access.
 
 variable "network_mode" {
-  description = "Application exposure. Public HTTPS is supported for all four runtimes; private HTTPS currently supports Cloud Run. VPN/private connectivity remains customer-managed."
+  description = "Application exposure. Public HTTPS is supported for all three runtimes; private HTTPS currently supports Cloud Run. VPN/private connectivity remains customer-managed."
   type        = string
   default     = "public"
 
@@ -373,13 +373,13 @@ variable "filestore_backup_retention_days" {
 # ---------------------------------------------------------------------------
 
 variable "deployment_mode" {
-  description = "The single application deployment target: Cloud Run, a new GKE Standard or Autopilot cluster, or an existing shared GKE cluster."
+  description = "The single application deployment target: Cloud Run, a new GKE Standard cluster, or a new GKE Autopilot cluster. Shared clusters are deferred."
   type        = string
   default     = "cloud_run"
 
   validation {
-    condition     = contains(["cloud_run", "standard", "shared", "autopilot"], var.deployment_mode)
-    error_message = "deployment_mode must be cloud_run, standard, shared, or autopilot."
+    condition     = contains(["cloud_run", "standard", "autopilot"], var.deployment_mode)
+    error_message = "deployment_mode must be cloud_run, standard, or autopilot. Shared GKE is not supported by this release."
   }
 }
 
@@ -395,8 +395,8 @@ variable "gke_endpoint_detach_for_migration" {
   default     = false
 
   validation {
-    condition     = !var.gke_endpoint_detach_for_migration || contains(["standard", "autopilot", "shared"], var.deployment_mode)
-    error_message = "gke_endpoint_detach_for_migration is only valid while deployment_mode remains standard, autopilot, or shared."
+    condition     = !var.gke_endpoint_detach_for_migration || contains(["standard", "autopilot"], var.deployment_mode)
+    error_message = "gke_endpoint_detach_for_migration is only valid while deployment_mode remains standard or autopilot."
   }
 }
 
@@ -421,17 +421,13 @@ variable "helm_kubernetes_token_override" {
 }
 
 variable "gke_cluster_name" {
-  description = "GKE cluster name to create, or existing cluster name when deployment_mode is shared. Ignored for cloud_run."
+  description = "GKE cluster name to create. Ignored for cloud_run."
   type        = string
   default     = null
 
   validation {
     condition     = var.gke_cluster_name == null || can(regex("^[a-z]([-a-z0-9]*[a-z0-9])?$", var.gke_cluster_name))
     error_message = "gke_cluster_name must contain only lowercase letters, numbers, and hyphens, and start with a letter."
-  }
-  validation {
-    condition     = var.deployment_mode != "shared" || var.gke_cluster_name != null
-    error_message = "gke_cluster_name is required when deployment_mode is shared."
   }
 }
 
@@ -440,10 +436,6 @@ variable "gke_cluster_location" {
   type        = string
   default     = null
 
-  validation {
-    condition     = var.deployment_mode != "shared" || var.gke_cluster_location != null
-    error_message = "gke_cluster_location is required when deployment_mode is shared."
-  }
 }
 
 variable "gke_network_self_link" {
@@ -459,7 +451,7 @@ variable "gke_subnetwork_self_link" {
 }
 
 variable "gke_node_machine_type" {
-  description = "Machine type for the GKE Standard node pool. Ignored by shared and Autopilot modes."
+  description = "Machine type for the GKE Standard node pool. Ignored by Autopilot mode."
   type        = string
   default     = "e2-standard-4"
 }
@@ -493,7 +485,7 @@ variable "gke_node_service_account" {
 }
 
 variable "gke_postgresql_host" {
-  description = "Optional PostgreSQL host reachable from GKE. Defaults to the Cloud SQL private IP; set this for shared-cluster network routing or a customer-managed proxy."
+  description = "Optional PostgreSQL host reachable from GKE. Defaults to the Cloud SQL private IP; set this for a customer-managed proxy."
   type        = string
   default     = null
 

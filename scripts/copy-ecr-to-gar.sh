@@ -50,7 +50,7 @@ gcloud services enable artifactregistry.googleapis.com --project="$PROJECT_ID" -
 repositories="$(gcloud artifacts repositories list --project="$PROJECT_ID" \
   --location="$REGION" --format='value(name)' --quiet)"
 repository_path="projects/${PROJECT_ID}/locations/${REGION}/repositories/${REPOSITORY}"
-if ! printf '%s\n' "$repositories" | grep -Fxq "$REPOSITORY"; then
+if ! printf '%s\n' "$repositories" | grep -Fxq "$repository_path"; then
   gcloud artifacts repositories create "$REPOSITORY" --project="$PROJECT_ID" \
     --location="$REGION" --repository-format=docker \
     --description='OpsRabbit backend/web images.' \

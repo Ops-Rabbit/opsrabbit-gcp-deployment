@@ -10,7 +10,7 @@ Terraform for deploying OpsRabbit on Google Cloud.
 | Pull identity | Service account + `roles/artifactregistry.reader` |
 | Persistent storage | Filestore instance, four subdirectories mounted into Cloud Run as separate NFS volumes (`.opsrabbit`, `git`, `.agent-browser`, `.codex` under `/home/opsbot`) |
 | Database | Cloud SQL for PostgreSQL 16, with the `vector` extension |
-| Compute | Cloud Run v2 service running `web` (ingress), `backend`, and a private-IP Cloud SQL Auth Proxy; or optional GKE Standard, shared-cluster, and Autopilot deployment |
+| Compute | Cloud Run v2 service running `web` (ingress), `backend`, and a private-IP Cloud SQL Auth Proxy; or optional GKE Standard and Autopilot deployment |
 | File backups | Daily Workflows + Cloud Scheduler backups; 14-day retention |
 | Secrets | Secret Manager (DB URL, `BETTER_AUTH_SECRET`, `OPSRABBIT_NODE_ENCRYPTION_KEY`) |
 | Networking | Dedicated VPC + subnet, Direct VPC egress from Cloud Run to Filestore |
@@ -29,7 +29,7 @@ Terraform for deploying OpsRabbit on Google Cloud.
 | `secrets.tf` | Secret Manager secrets |
 | `cloud-run.tf` | The Cloud Run v2 service |
 | `private-ingress.tf` | Optional internal HTTPS load balancer and source allowlist |
-| `gke.tf` | Optional GKE clusters, node pools, shared-cluster lookup, and Helm release |
+| `gke.tf` | Optional GKE clusters, node pools, and Helm release |
 | `outputs.tf` | Deployment addresses and resource names |
 | `terraform.tfvars.example` | Secret-free example input; defaults to Cloud Run bootstrap |
 | [`docs/qa-p0-smoke-prerequisites.md`](docs/qa-p0-smoke-prerequisites.md) | Repeatable P0-01 through P0-09 test setup, safe QA credentials, fixtures, and results |
@@ -96,7 +96,7 @@ a new installation: generate new application secrets and do not claim a restore.
 ## Setup
 
 Choose exactly one runtime before applying. Steps 3–6 below describe **Cloud Run**
-bootstrap. For `standard`, `autopilot`, or `shared`, follow the
+bootstrap. For `standard` or `autopilot`, follow the
 [GKE installation sequence](#gke-installation-sequence) instead: GKE installs the
 Helm release immediately, even when `application_enabled = false`.
 
@@ -332,9 +332,8 @@ during a routine image upgrade.
 1. Complete the authentication preflight and configure the state backend above.
    Copy `terraform.tfvars.example` to the ignored `terraform.tfvars` and set the
    actual project, region, runtime, database sizing, and backend UID/GID.
-2. Set `deployment_mode` to `standard`, `autopilot`, or `shared` and
-   `application_enabled = true`. For shared clusters, also supply the existing
-   cluster and networking inputs described below. Do not use Cloud Run's
+2. Set `deployment_mode` to `standard` or `autopilot` and
+   `application_enabled = true`. Do not use Cloud Run's
    bootstrap apply or Filestore initialization job for GKE.
 3. Supply both immutable Artifact Registry image references **before** planning.
    If the approved images already exist, reuse their digests; no copy is needed.
@@ -371,15 +370,16 @@ uses a separate persistent volume: scheduled Filestore backups do **not** protec
 that GKE volume. Restoring a previous installation requires a separate, explicit
 database and volume recovery procedure before admitting user traffic.
 
-Choose exactly one `deployment_mode`: `cloud_run`, `standard`, `autopilot`, or
-`shared`. Cloud Run is the default. The GKE values deploy the application
+Choose exactly one `deployment_mode`: `cloud_run`, `standard`, or
+`autopilot`. Shared GKE is intentionally rejected pending a separate PR.
+Cloud Run is the default. The GKE values deploy the application
 through the OpsRabbit Helm chart and do not create Cloud Run resources:
 
-All four modes accept the same public endpoint inputs and return `opsrabbit_url`.
+All three supported modes accept the same public endpoint inputs and return `opsrabbit_url`.
 For example, select a runtime and supply customer installation settings:
 
 ```hcl
-deployment_mode           = "standard" # cloud_run, standard, autopilot, shared
+deployment_mode           = "standard" # cloud_run, standard, autopilot
 application_enabled       = true
 application_origin        = "https://opsrabbit.customer.example"
 endpoint_dns_managed_zone = "customer-public-zone"
@@ -398,23 +398,13 @@ The load-balancer health check exercises `/api/health` through the web proxy.
   `gke_subnetwork_self_link` to place it in an existing VPC, or let it use the
   module's VPC and subnet.
 - `autopilot` creates a GKE Autopilot cluster and lets GKE manage nodes.
-- `shared` looks up an existing cluster using the required
-  `gke_cluster_name` and `gke_cluster_location` values. Terraform does not
-  modify or delete that cluster.
-
-Shared mode additionally requires `create_vpc=false`, the cluster's VPC in
-`existing_network_self_link`, and a suitable existing subnet in
-`existing_subnet_self_link`. Plan-time checks require a VPC-native cluster,
-Workload Identity for the deployment project and the HTTP load-balancing add-on.
-The installation identity must reach the Kubernetes API and be allowed to create
-namespace resources, including Ingress/FrontendConfig/BackendConfig. The existing
-node identity must be able to pull the supplied private images, and cluster policy
-must allow load-balancer health checks and traffic to the web pods. The installer
-does not reconfigure the customer's cluster or its organization policies.
+An existing shared GKE cluster is not a supported installer target in this
+release. Its networking, identity, storage, and cluster-policy integration will
+be reviewed in a separate PR before enabling `deployment_mode = "shared"`.
 
 Private GKE endpoint provisioning is not implemented and is rejected explicitly;
 private access currently supports Cloud Run only. Public endpoint provisioning
-covers all four runtime choices. A change of runtime on an existing installation
+covers all three supported runtime choices. A change of runtime on an existing installation
 is a migration and is not equivalent to a fresh installation.
 
 GKE uses the chart bundled at `charts/opsrabbit` by default, so the first
@@ -436,11 +426,11 @@ replica remains because its application PVC uses ReadWriteOnce; this is not a
 fully highly available installation, and production availability requires a
 reviewed shared-storage or stateless backend design.
 Standard mode provisions a dedicated node service account with only Artifact
-Registry pull access when `gke_node_service_account` is not supplied. Shared
-and Autopilot modes use the cluster's existing node identity configuration.
+Registry pull access when `gke_node_service_account` is not supplied.
+Autopilot uses the cluster's default node identity configuration.
 GKE connects to Cloud SQL over its private IP with TLS; set
-`gke_postgresql_host` when a shared cluster reaches the database through a
-customer-managed hostname or proxy. Ensure the selected cluster network can
+`gke_postgresql_host` when using a customer-managed hostname or proxy.
+Ensure the selected cluster network can
 route to the Cloud SQL private service access range.
 Keep Terraform state in an encrypted, access-controlled GCS backend. The
 `gke_helm_values` map is intentionally for non-secret overrides only.
@@ -451,7 +441,7 @@ both need ports 80/443 on that IP; asynchronous GKE cleanup makes a single
 Terraform apply race and may leave the endpoint down. Treat a runtime switch as
 a separately planned migration with an expected endpoint outage:
 
-1. While `deployment_mode` is still `standard`, `autopilot`, or `shared`, apply
+1. While `deployment_mode` is still `standard` or `autopilot`, apply
    `gke_endpoint_detach_for_migration=true`. For a module-created cluster, also
    apply `gke_deletion_protection=false` in this preparatory step. The Helm
    release stays installed, but its GKE Ingress is removed; the static IP and

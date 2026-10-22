@@ -2,7 +2,8 @@ project_id  = "my-gcp-project"
 region      = "us-central1"
 name_prefix = "opsrabbit"
 
-# Choose exactly one deployment target: cloud_run, standard, autopilot, or shared.
+# Choose exactly one deployment target: cloud_run, standard, or autopilot.
+# Shared GKE requires a later release and is rejected by this installer.
 deployment_mode = "cloud_run"
 
 # ---- Networking ----

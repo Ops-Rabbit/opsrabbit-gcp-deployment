@@ -68,33 +68,6 @@ resource "google_service_account_iam_member" "gke_workload_identity" {
   member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.gke_namespace}/${local.gke_ksa_name}]"
 }
 
-data "google_container_cluster" "shared" {
-  count    = var.deployment_mode == "shared" ? 1 : 0
-  project  = var.project_id
-  name     = local.gke_cluster_name
-  location = local.gke_cluster_location
-
-  lifecycle {
-    postcondition {
-      condition = var.gke_cluster_name == null || (
-        !var.create_vpc && try(
-          (strcontains(self.network, "/") ? trimprefix(self.network, "https://www.googleapis.com/compute/v1/") : "projects/${var.project_id}/global/networks/${self.network}") ==
-          trimprefix(var.existing_network_self_link, "https://www.googleapis.com/compute/v1/"), false
-        )
-      )
-      error_message = "Shared GKE requires create_vpc=false and the existing cluster VPC as existing_network_self_link so the application can reach its private database."
-    }
-    postcondition {
-      condition = var.gke_cluster_name == null || try(
-        self.workload_identity_config[0].workload_pool == "${var.project_id}.svc.id.goog" &&
-        length(self.ip_allocation_policy) > 0 &&
-        !self.addons_config[0].http_load_balancing[0].disabled, false
-      )
-      error_message = "The shared cluster must be VPC-native with Workload Identity and the GKE HTTP load-balancing add-on enabled. The installer does not modify customer cluster settings."
-    }
-  }
-}
-
 resource "google_container_cluster" "opsrabbit" {
   count = var.deployment_mode == "standard" ? 1 : 0
 
@@ -287,5 +260,5 @@ resource "helm_release" "opsrabbit" {
     value = var.opsrabbit_encryption_key
   }
 
-  depends_on = [google_container_node_pool.opsrabbit, data.google_container_cluster.shared, google_service_account_iam_member.gke_workload_identity, google_artifact_registry_repository_iam_member.gke_autopilot_pull, google_project_iam_member.gke_autopilot_default_role]
+  depends_on = [google_container_node_pool.opsrabbit, google_service_account_iam_member.gke_workload_identity, google_artifact_registry_repository_iam_member.gke_autopilot_pull, google_project_iam_member.gke_autopilot_default_role]
 }

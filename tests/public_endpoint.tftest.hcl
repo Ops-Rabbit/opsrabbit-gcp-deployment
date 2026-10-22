@@ -4,15 +4,6 @@ mock_provider "google" {
     override_during = plan
     defaults        = { visibility = "public", dns_name = "example.com." }
   }
-  mock_data "google_container_cluster" {
-    override_during = plan
-    defaults = {
-      network                  = "customer-vpc"
-      workload_identity_config = [{ workload_pool = "test-project.svc.id.goog" }]
-      ip_allocation_policy     = [{ cluster_ipv4_cidr_block = "10.20.0.0/16" }]
-      addons_config            = [{ http_load_balancing = [{ disabled = false }] }]
-    }
-  }
   mock_resource "google_compute_managed_ssl_certificate" {
     override_during = plan
     defaults        = { self_link = "projects/test-project/global/sslCertificates/opsrabbit-application" }
@@ -114,52 +105,6 @@ run "gke_migration_detaches_ingress_before_reusing_static_ip" {
     )
     error_message = "The preparatory migration apply must remove GKE Ingress while retaining the reserved address."
   }
-}
-
-run "shared_installs_endpoint_without_owning_cluster" {
-  command = plan
-  variables {
-    deployment_mode            = "shared"
-    gke_cluster_name           = "customer-cluster"
-    gke_cluster_location       = "us-central1"
-    create_vpc                 = false
-    existing_network_self_link = "projects/test-project/global/networks/customer-vpc"
-    existing_subnet_self_link  = "projects/test-project/regions/us-central1/subnetworks/customer-subnet"
-  }
-  assert {
-    condition = (
-      length(google_container_cluster.opsrabbit) == 0 &&
-      length(google_container_cluster.autopilot) == 0 &&
-      length(google_container_node_pool.opsrabbit) == 0 &&
-      length(google_compute_global_address.application) == 1 &&
-      yamldecode(helm_release.opsrabbit[0].values[1]).gkeEndpoint.enabled &&
-      output.opsrabbit_url == var.application_origin
-    )
-    error_message = "Shared mode must install the application endpoint without creating a cluster or node pool."
-  }
-}
-
-run "shared_rejects_disconnected_database_network" {
-  command = plan
-  variables {
-    deployment_mode      = "shared"
-    gke_cluster_name     = "customer-cluster"
-    gke_cluster_location = "us-central1"
-  }
-  expect_failures = [data.google_container_cluster.shared]
-}
-
-run "shared_rejects_same_network_name_in_another_project" {
-  command = plan
-  variables {
-    deployment_mode            = "shared"
-    gke_cluster_name           = "customer-cluster"
-    gke_cluster_location       = "us-central1"
-    create_vpc                 = false
-    existing_network_self_link = "projects/wrong-host/global/networks/customer-vpc"
-    existing_subnet_self_link  = "projects/wrong-host/regions/us-central1/subnetworks/customer-subnet"
-  }
-  expect_failures = [data.google_container_cluster.shared]
 }
 
 run "customer_dns_and_certificate_are_supported" {

@@ -1,5 +1,10 @@
 mock_provider "google-beta" {}
-mock_provider "google" {}
+mock_provider "google" {
+  mock_resource "google_container_cluster" {
+    override_during = plan
+    defaults        = { endpoint = "203.0.113.10" }
+  }
+}
 mock_provider "helm" {}
 
 variables {
@@ -60,6 +65,11 @@ run "standard_creates_cluster_and_node_pool" {
     condition     = endswith(helm_release.opsrabbit[0].chart, "/charts/opsrabbit")
     error_message = "GKE must use the bundled OpsRabbit chart by default."
   }
+
+  assert {
+    condition     = local.helm_kubernetes_host == "https://${google_container_cluster.opsrabbit[0].endpoint}"
+    error_message = "Helm must use an HTTPS URI for the Standard cluster API endpoint."
+  }
 }
 
 run "autopilot_does_not_create_node_pool" {
@@ -83,16 +93,21 @@ run "autopilot_does_not_create_node_pool" {
     condition     = length(google_project_iam_member.gke_autopilot_default_role) == 1
     error_message = "Autopilot mode must grant its default node identity GKE's baseline node role."
   }
+
+  assert {
+    condition     = local.helm_kubernetes_host == "https://${google_container_cluster.autopilot[0].endpoint}"
+    error_message = "Helm must use an HTTPS URI for the Autopilot cluster API endpoint."
+  }
 }
 
-run "shared_requires_explicit_cluster_identity" {
+run "shared_mode_is_deferred" {
   command = plan
 
   variables {
     deployment_mode = "shared"
   }
 
-  expect_failures = [var.gke_cluster_name, var.gke_cluster_location]
+  expect_failures = [var.deployment_mode]
 }
 
 run "rejects_unpinned_external_gke_chart" {
@@ -106,7 +121,7 @@ run "rejects_unpinned_external_gke_chart" {
   expect_failures = [var.gke_helm_chart_version]
 }
 
-run "accepts_shared_cluster_database_host_override" {
+run "accepts_gke_database_host_override" {
   command = plan
 
   variables {
@@ -118,6 +133,6 @@ run "accepts_shared_cluster_database_host_override" {
 
   assert {
     condition     = local.gke_postgresql_host == "postgres.internal.example.com"
-    error_message = "GKE deployments must support a customer-provided database host for shared network topologies."
+    error_message = "GKE deployments must support a customer-provided database host."
   }
 }
