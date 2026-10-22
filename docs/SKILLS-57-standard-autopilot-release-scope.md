@@ -19,7 +19,7 @@ changed by this scope adjustment.
   port 80. The chart adapts that template to its unprivileged port 8080. This
   source check is not a new image build, vulnerability scan, or live test.
 - Local `make check` on 2026-10-22: Terraform format/validate/TFLint passed;
-  67 Terraform tests and 30 Python tests passed; strict Helm lint and render
+  68 Terraform tests and 30 Python tests passed; strict Helm lint and render
   tests passed; Trivy Terraform and rendered Kubernetes configuration scans
   reported zero findings using embedded checks (downloadable policy cache was
   unavailable).
@@ -28,6 +28,9 @@ changed by this scope adjustment.
   Artifact Registry existing-repository lookup mismatch. Both were corrected;
   Standard and Autopilot endpoint assertions and an offline image-copy fixture
   were added to the tests.
+- A follow-up P1 review found that the temporary Standard initial node pool
+  used the Compute default identity. It now uses the generated or supplied node
+  identity after the installer-managed IAM grants; both variants have plan tests.
 
 ## Review and rollout limitations
 

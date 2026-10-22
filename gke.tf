@@ -84,6 +84,22 @@ resource "google_container_cluster" "opsrabbit" {
   enable_shielded_nodes       = true
   enable_intranode_visibility = true
 
+  # GKE creates this pool before removing it. Hardened projects may disable
+  # the Compute Engine default identity, so use the intended node identity even
+  # for that short-lived pool.
+  node_config {
+    service_account = local.gke_node_service_account
+    oauth_scopes = [
+      "https://www.googleapis.com/auth/logging.write",
+      "https://www.googleapis.com/auth/monitoring",
+      "https://www.googleapis.com/auth/monitoring.write",
+      "https://www.googleapis.com/auth/devstorage.read_only",
+      "https://www.googleapis.com/auth/servicecontrol",
+      "https://www.googleapis.com/auth/service.management.readonly",
+      "https://www.googleapis.com/auth/trace.append",
+    ]
+  }
+
   release_channel {
     channel = "REGULAR"
   }
@@ -96,7 +112,7 @@ resource "google_container_cluster" "opsrabbit" {
 
   resource_labels = local.common_labels
 
-  depends_on = [google_project_service.required]
+  depends_on = [google_project_service.required, google_artifact_registry_repository_iam_member.gke_node_pull, google_project_iam_member.gke_node_default_role]
 }
 
 resource "google_container_cluster" "autopilot" {

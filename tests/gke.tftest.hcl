@@ -1,5 +1,12 @@
 mock_provider "google-beta" {}
 mock_provider "google" {
+  mock_resource "google_service_account" {
+    override_during = plan
+    defaults = {
+      email = "opsrabbit-gke-node@test-project.iam.gserviceaccount.com"
+      name  = "projects/test-project/serviceAccounts/opsrabbit-gke-node@test-project.iam.gserviceaccount.com"
+    }
+  }
   mock_resource "google_container_cluster" {
     override_during = plan
     defaults        = { endpoint = "203.0.113.10" }
@@ -57,6 +64,11 @@ run "standard_creates_cluster_and_node_pool" {
   }
 
   assert {
+    condition     = google_container_cluster.opsrabbit[0].node_config[0].service_account == google_service_account.gke_node[0].email
+    error_message = "The temporary Standard initial node pool must use the dedicated node identity."
+  }
+
+  assert {
     condition     = length(helm_release.opsrabbit) == 1 && helm_release.opsrabbit[0].namespace == "opsrabbit"
     error_message = "Standard mode must install the OpsRabbit Helm release into the configured namespace."
   }
@@ -69,6 +81,20 @@ run "standard_creates_cluster_and_node_pool" {
   assert {
     condition     = local.helm_kubernetes_host == "https://${google_container_cluster.opsrabbit[0].endpoint}"
     error_message = "Helm must use an HTTPS URI for the Standard cluster API endpoint."
+  }
+}
+
+run "standard_uses_customer_node_identity_for_initial_pool" {
+  command = plan
+
+  variables {
+    deployment_mode          = "standard"
+    gke_node_service_account = "customer-nodes@test-project.iam.gserviceaccount.com"
+  }
+
+  assert {
+    condition     = google_container_cluster.opsrabbit[0].node_config[0].service_account == var.gke_node_service_account && length(google_service_account.gke_node) == 0
+    error_message = "A supplied Standard node identity must also be used by the temporary initial pool."
   }
 }
 
