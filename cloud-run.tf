@@ -1,13 +1,13 @@
 resource "google_cloud_run_v2_service" "opsrabbit" {
   provider = google-beta
-  count    = var.application_enabled ? 1 : 0
+  count    = local.cloud_run_enabled ? 1 : 0
 
   project              = var.project_id
   name                 = "${var.name_prefix}-app"
   location             = var.region
   deletion_protection  = true
-  ingress              = var.network_mode == "private" ? "INGRESS_TRAFFIC_INTERNAL_ONLY" : "INGRESS_TRAFFIC_ALL"
-  default_uri_disabled = var.network_mode == "private"
+  ingress              = var.network_mode == "private" ? "INGRESS_TRAFFIC_INTERNAL_ONLY" : local.public_cloud_run_endpoint ? "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" : "INGRESS_TRAFFIC_ALL"
+  default_uri_disabled = var.network_mode == "private" || local.public_cloud_run_endpoint
   # Private clients authenticate with OpsRabbit. The ILB and Cloud Armor enforce
   # network access; the disabled default URL prevents bypassing their allowlist.
   invoker_iam_disabled = var.network_mode == "private"
@@ -297,7 +297,7 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
 }
 
 resource "google_cloud_run_v2_service_iam_member" "public" {
-  count = var.application_enabled && var.network_mode == "public" && var.allow_unauthenticated ? 1 : 0
+  count = local.cloud_run_enabled && var.network_mode == "public" && var.allow_unauthenticated ? 1 : 0
 
   project  = var.project_id
   location = var.region

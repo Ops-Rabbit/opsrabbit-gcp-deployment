@@ -1,0 +1,29 @@
+{{- if .Values.gkeEndpoint.enabled }}
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: {{ include "opsrabbit.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  sslPolicy: {{ required "gkeEndpoint.sslPolicy is required" .Values.gkeEndpoint.sslPolicy | quote }}
+  redirectToHttps:
+    enabled: true
+    responseCodeName: MOVED_PERMANENTLY_DEFAULT
+---
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: {{ include "opsrabbit.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  timeoutSec: 3600
+  connectionDraining:
+    drainingTimeoutSec: 60
+  healthCheck:
+    type: HTTP
+    port: {{ .Values.web.containerPort }}
+    requestPath: /api/health
+  logging:
+    enable: true
+    sampleRate: 1.0
+{{- end }}

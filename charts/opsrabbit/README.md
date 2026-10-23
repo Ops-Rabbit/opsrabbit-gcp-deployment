@@ -39,7 +39,9 @@ through shell history with `--set`.
 ## Configuration
 
 The chart exposes independent `backend` and `web` image, resource, command,
-argument, and environment settings. `service.type` controls both Services;
+argument, and environment settings. `service.type` controls the web Service;
+the backend always uses ClusterIP. Installer-managed GKE endpoints keep both
+Services as ClusterIP and configure the public load balancer using `gkeEndpoint`.
 `ingress.enabled` creates a networking.k8s.io/v1 Ingress for the web Service.
 
 Persistent application state is stored in one configurable PVC and mounted

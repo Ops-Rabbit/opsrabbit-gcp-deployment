@@ -92,8 +92,8 @@ run "rejects_wrong_certificate_region" {
 run "public_behavior_unchanged" {
   command = plan
   assert {
-    condition     = length(google_compute_forwarding_rule.private_ingress) == 0 && length(google_compute_region_security_policy.private_ingress) == 0 && length(google_cloud_run_v2_service_iam_member.public) == 1 && !google_cloud_run_v2_service.opsrabbit[0].default_uri_disabled && !google_cloud_run_v2_service.opsrabbit[0].invoker_iam_disabled
-    error_message = "Public deployments must preserve their existing ingress and IAM behavior without creating private infrastructure."
+    condition     = length(google_compute_forwarding_rule.private_ingress) == 0 && length(google_compute_region_security_policy.private_ingress) == 0 && length(google_cloud_run_v2_service_iam_member.public) == 1 && google_cloud_run_v2_service.opsrabbit[0].default_uri_disabled && !google_cloud_run_v2_service.opsrabbit[0].invoker_iam_disabled
+    error_message = "Public custom-domain deployments must use the external load balancer and preserve invoker IAM without creating private infrastructure."
   }
 }
 

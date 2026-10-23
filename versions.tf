@@ -20,5 +20,9 @@ terraform {
       # and the regional backend service's Cloud Armor attachment.
       version = "6.50.0"
     }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.17"
+    }
   }
 }

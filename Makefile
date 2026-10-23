@@ -38,6 +38,9 @@ helm-test:
 	@tmpdir=$$(mktemp -d); trap 'rm -rf "$$tmpdir"' EXIT; \
 	$(HELM) template opsrabbit $(HELM_CHART) --namespace opsrabbit --set image.backend=$(HELM_TEST_BACKEND_IMAGE) --set image.web=$(HELM_TEST_WEB_IMAGE) --set secrets.existingSecret=$(HELM_TEST_SECRET) > "$$tmpdir/rendered.yaml"; \
 	$(TRIVY) config --exit-code 1 --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --skip-check-update --misconfig-scanners kubernetes "$$tmpdir/rendered.yaml"
+	@tmpdir=$$(mktemp -d); trap 'rm -rf "$$tmpdir"' EXIT; \
+	$(HELM) template opsrabbit $(HELM_CHART) --namespace opsrabbit --set image.backend=$(HELM_TEST_BACKEND_IMAGE) --set image.web=$(HELM_TEST_WEB_IMAGE) --set secrets.existingSecret=$(HELM_TEST_SECRET) --set ingress.enabled=true --set gkeEndpoint.enabled=true --set gkeEndpoint.staticIpName=application-ip --set gkeEndpoint.certificateNames=application-cert --set gkeEndpoint.sslPolicy=application-tls > "$$tmpdir/rendered.yaml" && \
+	$(TRIVY) config --exit-code 1 --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --skip-check-update --misconfig-scanners kubernetes "$$tmpdir/rendered.yaml"
 
 security:
 	@echo "Scanning public mode"

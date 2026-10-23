@@ -1,5 +1,5 @@
 locals {
-  private_ingress_enabled = var.network_mode == "private" && var.application_enabled && var.private_ingress != null
+  private_ingress_enabled = var.network_mode == "private" && local.cloud_run_enabled && var.private_ingress != null
   create_proxy_subnet     = local.private_ingress_enabled && try(var.private_ingress.proxy_subnet_cidr, null) != null
   existing_proxy_subnet   = local.private_ingress_enabled && try(var.private_ingress.existing_proxy_subnet_self_link, null) != null
 }
