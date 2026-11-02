@@ -37,6 +37,11 @@ Terraform for deploying OpsRabbit on Google Cloud.
 
 ## Helm deployment
 
+For the optional managed sandbox service on dedicated GKE Standard or Autopilot,
+see [OpenSandbox installation](docs/opensandbox-installation.md). This installs
+the private service and initializes a fresh OpsRabbit instance automatically;
+existing administrator settings are preserved.
+
 The reusable OpsRabbit chart is in [`charts/opsrabbit`](charts/opsrabbit). It
 deploys separate web and backend workloads, ClusterIP Services, optional
 Ingress, a configurable PVC, probes, Secret references, and hardened pod and

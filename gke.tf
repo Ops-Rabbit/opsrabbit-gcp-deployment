@@ -104,7 +104,9 @@ resource "google_container_cluster" "opsrabbit" {
     channel = "REGULAR"
   }
 
-  ip_allocation_policy {}
+  ip_allocation_policy {
+    stack_type = "IPV4"
+  }
 
   workload_identity_config {
     workload_pool = "${var.project_id}.svc.id.goog"
@@ -127,8 +129,13 @@ resource "google_container_cluster" "autopilot" {
 
   enable_autopilot    = true
   deletion_protection = var.gke_deletion_protection
+  # Required only by OpenSandbox's egress sidecar; sandbox commands do not
+  # receive NET_ADMIN. Upstream dns+nft enforcement must remain enabled.
+  allow_net_admin = var.opensandbox_enabled
 
-  ip_allocation_policy {}
+  ip_allocation_policy {
+    stack_type = "IPV4"
+  }
 
   workload_identity_config {
     workload_pool = "${var.project_id}.svc.id.goog"
