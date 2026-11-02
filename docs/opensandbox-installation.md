@@ -33,6 +33,10 @@ Autopilot cluster owned by this installer. It is disabled by default.
   containers drop all capabilities and run non-root without privilege escalation;
   explicit Unconfined AppArmor/seccomp permit the Bubblewrap user namespaces.
   This remains workspace-only execution, not unrestricted filesystem access.
+- Controller, gateway and server run as UID/GID 10001 with a read-only root
+  filesystem, no added capabilities and RuntimeDefault seccomp. The server's
+  local snapshot catalog uses a bounded temporary volume; snapshot/pause/resume
+  is not part of this installer and its catalog is not durable across Pod removal.
 
 ## Configuration
 

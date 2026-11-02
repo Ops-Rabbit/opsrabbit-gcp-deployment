@@ -49,6 +49,16 @@ run "standard_private_services_and_activation" {
     error_message = "All prerequisites and product bootstrap must be selected."
   }
   assert {
+    condition = alltrue([
+      for component in [
+        yamldecode(helm_release.opensandbox_controller[0].values[0]).controller,
+        yamldecode(helm_release.opensandbox_gateway[0].values[0]).gateway,
+        yamldecode(helm_release.opensandbox_server[0].values[0]).server
+      ] : component.podSecurityContext.runAsNonRoot && component.podSecurityContext.runAsUser > 10000 && component.podSecurityContext.seccompProfile.type == "RuntimeDefault" && component.containerSecurityContext.readOnlyRootFilesystem && !component.containerSecurityContext.allowPrivilegeEscalation && contains(component.containerSecurityContext.capabilities.drop, "ALL")
+    ])
+    error_message = "Control-plane components must not run as root, elevate privileges or write their image filesystem."
+  }
+  assert {
     condition     = yamldecode(helm_release.opensandbox_server[0].values[0]).server.service.type == "ClusterIP" && yamldecode(helm_release.opensandbox_gateway[0].values[0]).gateway.service.type == "ClusterIP"
     error_message = "Sandbox services must not have public endpoints."
   }

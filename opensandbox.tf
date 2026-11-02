@@ -22,6 +22,18 @@ variable "opensandbox_images" {
 }
 
 locals {
+  opensandbox_pod_security = {
+    runAsNonRoot   = true
+    runAsUser      = 10001
+    runAsGroup     = 10001
+    fsGroup        = 10001
+    seccompProfile = { type = "RuntimeDefault" }
+  }
+  opensandbox_container_security = {
+    allowPrivilegeEscalation = false
+    readOnlyRootFilesystem   = true
+    capabilities             = { drop = ["ALL"] }
+  }
   opensandbox_chart_images = {
     for component in ["controller", "server", "gateway"] : component => {
       repository = try(split("@", var.opensandbox_images[component])[0], "missing")
@@ -118,7 +130,11 @@ resource "helm_release" "opensandbox_controller" {
   lifecycle {
     replace_triggered_by = [terraform_data.opensandbox_cluster_identity]
   }
-  values     = [yamlencode({ namespaceOverride = var.opensandbox_namespace, controller = { image = local.opensandbox_chart_images.controller } })]
+  values = [yamlencode({ namespaceOverride = var.opensandbox_namespace, controller = {
+    image                    = local.opensandbox_chart_images.controller
+    podSecurityContext       = local.opensandbox_pod_security
+    containerSecurityContext = local.opensandbox_container_security
+  } })]
   depends_on = [helm_release.opensandbox_base]
 }
 
@@ -137,10 +153,12 @@ resource "helm_release" "opensandbox_gateway" {
     namespaceOverride = var.opensandbox_namespace
     fullnameOverride  = "opensandbox-ingress-gateway"
     gateway = {
-      dataplaneNamespace = var.opensandbox_workload_namespace
-      image              = local.opensandbox_chart_images.gateway
-      service            = { type = "ClusterIP" }
-      secureAccess       = { existingSecret = var.opensandbox_signing_secret }
+      podSecurityContext       = local.opensandbox_pod_security
+      containerSecurityContext = local.opensandbox_container_security
+      dataplaneNamespace       = var.opensandbox_workload_namespace
+      image                    = local.opensandbox_chart_images.gateway
+      service                  = { type = "ClusterIP" }
+      secureAccess             = { existingSecret = var.opensandbox_signing_secret }
     }
   })]
   depends_on = [helm_release.opensandbox_controller, terraform_data.opensandbox_credentials]
@@ -167,6 +185,9 @@ resource "helm_release" "opensandbox_server" {
       api_key = ""
       [log]
       level = "INFO"
+      [store]
+      type = "sqlite"
+      path = "/tmp/opensandbox/snapshots.db"
       [runtime]
       type = "kubernetes"
       execd_image = ${jsonencode(lookup(var.opensandbox_images, "execd", "missing"))}
@@ -187,8 +208,12 @@ resource "helm_release" "opensandbox_server" {
       disable_ipv6 = false
     TOML
     server = {
-      image   = local.opensandbox_chart_images.server
-      service = { type = "ClusterIP" }
+      podSecurityContext       = local.opensandbox_pod_security
+      containerSecurityContext = local.opensandbox_container_security
+      volumes                  = [{ name = "tmp", emptyDir = { sizeLimit = "256Mi" } }]
+      volumeMounts             = [{ name = "tmp", mountPath = "/tmp" }]
+      image                    = local.opensandbox_chart_images.server
+      service                  = { type = "ClusterIP" }
       env = [{ name = "OPENSANDBOX_SERVER_API_KEY", valueFrom = {
         secretKeyRef = { name = var.opensandbox_api_key_secret, key = "api-key" }
       } }]
