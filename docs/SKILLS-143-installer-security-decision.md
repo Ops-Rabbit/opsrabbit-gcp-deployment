@@ -31,13 +31,19 @@ no shared cluster is required for this delivery.
 Autopilot rejected the upstream workspace-only runtime's SYS_ADMIN and privileged
 IPv6 init requirements. The owner explicitly chose to preserve workspace-only
 isolation and expand runtime work. The installer now selects a narrowly patched
-Kubernetes server profile, non-root workload identity, no workload capabilities,
-explicit Unconfined AppArmor/seccomp, and IPv4-only networking. The network
+Kubernetes server profile for Autopilot, non-root workload identity, no workload
+capabilities, explicit Unconfined AppArmor/seccomp, and IPv4-only networking.
+Standard retains the upstream workspace-only profile with SYS_ADMIN. The network
 sidecar retains NET_ADMIN. This is not a namespace-restricted distribution and
 does not reduce the upstream controller/server RBAC.
 
-A disposable Autopilot feasibility cluster is being used for live admission and
-execution checks. A basic Bubblewrap restricted filesystem probe passed; that
-does not establish full product or browser compatibility. Existing Standard proof
-also does not validate this installer. Record final acceptance separately before
-claiming customer readiness.
+The owner selected command/file delivery first and explicitly accepted browser
+execution as unsupported on Autopilot. There is no unrestricted filesystem or
+disabled Chromium sandbox fallback. Fresh Standard and Autopilot probes provide
+separate acceptance evidence; old Standard proof does not validate this installer.
+
+Rendered-chart security scanning still reports the intentionally retained upstream
+cluster-wide resource/Secret management permissions. These are dedicated-cluster
+trust requirements, not a clean least-privilege result or shared-cluster approval.
+Control-plane Pods are hardened separately with non-root UID/GID 10001, dropped
+capabilities, no privilege escalation, read-only roots and RuntimeDefault seccomp.

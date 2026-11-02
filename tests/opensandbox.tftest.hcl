@@ -75,8 +75,8 @@ run "standard_private_services_and_activation" {
     error_message = "Routine infrastructure updates must not repeat activation after an administrator reset."
   }
   assert {
-    condition     = google_container_cluster.opsrabbit[0].ip_allocation_policy[0].stack_type == "IPV4" && strcontains(yamldecode(helm_release.opensandbox_server[0].values[0]).configToml, "isolation_profile = \"unprivileged\"") && strcontains(yamldecode(helm_release.opensandbox_server[0].values[0]).configToml, "disable_ipv6 = false")
-    error_message = "The unprivileged profile requires IPv4-only networking without a privileged IPv6 init container."
+    condition     = google_container_cluster.opsrabbit[0].ip_allocation_policy[0].stack_type == "IPV4" && strcontains(yamldecode(helm_release.opensandbox_server[0].values[0]).configToml, "isolation_profile = \"privileged\"") && strcontains(yamldecode(helm_release.opensandbox_server[0].values[0]).configToml, "disable_ipv6 = false")
+    error_message = "Standard retains the upstream workspace-only profile on IPv4-only networking."
   }
 
 }

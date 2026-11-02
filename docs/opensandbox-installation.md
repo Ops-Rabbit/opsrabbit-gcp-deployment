@@ -29,9 +29,11 @@ Autopilot cluster owned by this installer. It is disabled by default.
   so the network-filtering sidecar can enforce the requested egress policy.
   This option is not supported for shared clusters.
 - Both managed cluster modes use IPv4-only Pod ranges. The server therefore
-  disables the upstream privileged IPv6-disable init container. Workload
-  containers drop all capabilities and run non-root without privilege escalation;
-  explicit Unconfined AppArmor/seccomp permit the Bubblewrap user namespaces.
+  disables the upstream privileged IPv6-disable init container. Standard retains
+  the upstream workspace-only profile, including workload SYS_ADMIN for nested
+  namespaces. Autopilot uses the unprivileged profile: numeric non-root identity,
+  all workload capabilities dropped, and no privilege escalation. Both require
+  explicit Unconfined AppArmor/seccomp for Bubblewrap user namespaces.
   This remains workspace-only execution, not unrestricted filesystem access.
 - Controller, gateway and server run as UID/GID 10001 with a read-only root
   filesystem, no added capabilities and RuntimeDefault seccomp. The server's
@@ -73,6 +75,12 @@ workspace-only filesystem policy, no host mounts and normal tool approvals.
 Product settings contain no GCP-specific configuration contract.
 
 ## Verify execution
+
+**Autopilot supports sandbox commands and file operations. Browser execution is
+unsupported.** Do not enable the browser tool for agents using this runtime.
+Its private procfs mount is rejected by Autopilot; failures must not trigger
+unrestricted execution or disable Chromium's sandbox. Standard retains the
+existing workspace-only browser profile and requires its own browser acceptance.
 
 A Helm-ready status alone does not prove command execution. Bootstrap verifies
 the basic execution path; the following acceptance checks cover the wider product.

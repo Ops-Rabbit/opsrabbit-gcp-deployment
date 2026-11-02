@@ -197,7 +197,7 @@ resource "helm_release" "opensandbox_server" {
       informer_resync_seconds = 300
       informer_watch_timeout_seconds = 60
       workload_provider = "batchsandbox"
-      isolation_profile = "unprivileged"
+      isolation_profile = ${jsonencode(var.deployment_mode == "autopilot" ? "unprivileged" : "privileged")}
       batchsandbox_template_file = "/etc/opensandbox/example.batchsandbox-template.yaml"
       sandbox_create_timeout_seconds = 300
       [egress]
