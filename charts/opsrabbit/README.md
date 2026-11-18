@@ -45,9 +45,10 @@ Services as ClusterIP and configure the public load balancer using `gkeEndpoint`
 `ingress.enabled` creates a networking.k8s.io/v1 Ingress for the web Service.
 
 Persistent application state is stored in one configurable PVC and mounted
-under `/home/opsbot` using the `.opsrabbit`, `git`, `.agent-browser`, and
-`.codex` subdirectories. Set `persistence.existingClaim` to use a customer-
-managed PVC.
+under `/home/opsbot` using the `.opsrabbit`, `git`, and `.agent-browser`
+subdirectories. The existing whole-home PVC mount is unchanged; any legacy
+`.codex` files on that volume are preserved. Set `persistence.existingClaim` to use
+a customer-managed PVC.
 
 Use `serviceAccount.annotations` for provider-specific workload identity. The
 Terraform integration supplies the GKE workload identity project value and can

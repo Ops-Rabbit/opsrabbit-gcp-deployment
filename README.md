@@ -8,7 +8,7 @@ Terraform for deploying OpsRabbit on Google Cloud.
 |---|---|
 | Image registry | Artifact Registry (Docker) |
 | Pull identity | Service account + `roles/artifactregistry.reader` |
-| Persistent storage | Cloud Run: four Filestore NFS mounts under `/home/opsbot`; GKE: chart-managed PVC or configured existing claim |
+| Persistent storage | Cloud Run: three Filestore NFS mounts under `/home/opsbot`; GKE: chart-managed PVC or configured existing claim |
 | Database | Cloud SQL for PostgreSQL 16, with the `vector` extension |
 | Compute | Cloud Run v2 service running `web` (ingress), `backend`, and a private-IP Cloud SQL Auth Proxy; or optional GKE Standard and Autopilot deployment |
 | File backups | Daily Workflows + Cloud Scheduler backups; 14-day retention |
@@ -52,7 +52,7 @@ flowchart TB
         backend --> proxy[Cloud SQL Auth Proxy]
     end
     proxy -->|Private IP via Direct VPC egress| sql[Cloud SQL PostgreSQL]
-    backend -->|NFS via Direct VPC egress| files[Filestore - four persistent directories]
+    backend -->|NFS via Direct VPC egress| files[Filestore - three persistent directories]
     secrets[Secret Manager] -.->|Secret environment references| backend
     registry[Artifact Registry] -.->|Container images| run
 ```
@@ -64,6 +64,13 @@ internal load balancer and serverless NEG and disables the default service URL;
 customers provide private connectivity, DNS, and certificates. The web container
 forwards API traffic to the backend; the backend is not a separate public endpoint.
 See [Setup](#setup) and [Private networking](#private-networking) for configuration.
+
+The Pi backend does not require a persistent `.codex` directory. Cloud Run mounts
+only `.opsrabbit`, `git`, and `.agent-browser`; removing the former `.codex`
+mount leaves the existing Filestore `codex` directory and its contents intact.
+No deletion or migration of those files is performed. GKE retains its whole-home
+PVC mount, including any existing legacy files. Deployed-image verification was
+deferred for this cleanup; the product Dockerfile/Compose cleanup is separate.
 
 ### GKE Standard (`deployment_mode = "standard"`)
 
@@ -132,6 +139,9 @@ images, cluster privileges, configuration, and acceptance checks.
 The Filestore backup workflow covers Filestore, not GKE PVC data; runtime-specific restore validation
 and the full live acceptance matrix remain outstanding as described in the
 [installer contract](docs/installer-contract.md#current-implementation-boundary).
+
+The component and storage responsibilities are also explained in the
+[architecture document](docs/architecture-and-data-storage.md).
 
 ## Files
 
