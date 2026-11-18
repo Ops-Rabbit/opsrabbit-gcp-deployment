@@ -8,12 +8,130 @@ Terraform for deploying OpsRabbit on Google Cloud.
 |---|---|
 | Image registry | Artifact Registry (Docker) |
 | Pull identity | Service account + `roles/artifactregistry.reader` |
-| Persistent storage | Filestore instance, four subdirectories mounted into Cloud Run as separate NFS volumes (`.opsrabbit`, `git`, `.agent-browser`, `.codex` under `/home/opsbot`) |
+| Persistent storage | Cloud Run: four Filestore NFS mounts under `/home/opsbot`; GKE: chart-managed PVC or configured existing claim |
 | Database | Cloud SQL for PostgreSQL 16, with the `vector` extension |
 | Compute | Cloud Run v2 service running `web` (ingress), `backend`, and a private-IP Cloud SQL Auth Proxy; or optional GKE Standard and Autopilot deployment |
 | File backups | Daily Workflows + Cloud Scheduler backups; 14-day retention |
-| Secrets | Secret Manager (DB URL, `BETTER_AUTH_SECRET`, `OPSRABBIT_NODE_ENCRYPTION_KEY`) |
-| Networking | Dedicated VPC + subnet, Direct VPC egress from Cloud Run to Filestore |
+| Application secrets | Cloud Run: Secret Manager version references; GKE: Kubernetes Secret populated through Helm |
+| Networking | Created or supplied VPC + subnet; Cloud Run uses Direct VPC egress for private services |
+
+Choose one application runtime. The diagrams below describe the checked-in
+Terraform installer and bundled Helm chart; custom chart values can change
+workload and storage details.
+
+| Option | Compute management | Application access | Persistent files | Optional OpenSandbox |
+|---|---|---|---|---|
+| `cloud_run` (default) | Cloud Run service with one warm instance per revision | Public native URL or custom domain; private internal HTTPS also supported | Filestore NFS mounts | Not provisioned |
+| `standard` | New GKE Standard cluster with a configured node pool | Public HTTPS with a customer domain | PVC or existing claim | Supported on dedicated clusters |
+| `autopilot` | New GKE Autopilot cluster with Google-managed nodes | Public HTTPS with a customer domain | PVC or existing claim | Supported for commands and file operations; browser execution unsupported |
+
+The application names used in customer architecture diagrams map as follows:
+
+| Diagram component | Responsibility | Deployment mapping |
+|---|---|---|
+| OpsRabbit Service | nginx serves frontend assets and proxies `/api` requests | Part of the web container; distinct from a Kubernetes Service resource |
+| OpsRabbit UI | Web frontend used in the browser | Assets served by the same web container |
+| OpsRabbit Platform Agent | Backend APIs, agent workflows, tools, and integrations | Backend container on Cloud Run; backend workload on GKE |
+
+These are logical responsibilities: nginx and the UI do not require separate
+workloads. Solid arrows below show application traffic or storage access; dotted
+arrows show provisioning, image delivery, secret injection, or optional sandbox
+execution. Browser API requests return through nginx to the backend. GKE Ingress
+configures the load balancer; its controller is not a request-processing hop.
+
+### Cloud Run (`deployment_mode = "cloud_run"`)
+
+```mermaid
+flowchart TB
+    user[Public browser] --> public["Native run.app HTTPS or public HTTPS load balancer"]
+    private["Private client via customer VPN / private connectivity"] --> internal[Internal HTTPS load balancer]
+    public --> web
+    internal --> web
+    subgraph run[Cloud Run v2 service - one warm instance per revision]
+        web["OpsRabbit Service and UI - web / nginx - port 8080"] -->|/api over localhost| backend["OpsRabbit Platform Agent - backend - port 8384"]
+        backend --> proxy[Cloud SQL Auth Proxy]
+    end
+    proxy -->|Private IP via Direct VPC egress| sql[Cloud SQL PostgreSQL]
+    backend -->|NFS via Direct VPC egress| files[Filestore - four persistent directories]
+    secrets[Secret Manager] -.->|Secret environment references| backend
+    registry[Artifact Registry] -.->|Container images| run
+```
+
+Choose either public or private ingress; the two paths above are alternatives.
+Public custom domains use a load balancer and serverless NEG, while the native
+`run.app` URL does not require a separate load balancer. Private mode uses an
+internal load balancer and serverless NEG and disables the default service URL;
+customers provide private connectivity, DNS, and certificates. The web container
+forwards API traffic to the backend; the backend is not a separate public endpoint.
+See [Setup](#setup) and [Private networking](#private-networking) for configuration.
+
+### GKE Standard (`deployment_mode = "standard"`)
+
+```mermaid
+flowchart TB
+    user[Public browser] --> lb["External HTTPS load balancer - custom domain and TLS"]
+    ingress[GKE Ingress configuration] -.->|Provisions routing| lb
+    lb --> websvc
+    subgraph cluster[New GKE Standard cluster - configured node pool]
+        websvc[Kubernetes web Service] --> web["OpsRabbit Service and UI - web / nginx pods"]
+        web -->|/api| backsvc[Backend ClusterIP Service]
+        backsvc --> backend["OpsRabbit Platform Agent - backend pod"]
+        backend --> pvc[PersistentVolumeClaim - mounted at /home/opsbot]
+        secret[Kubernetes Secret] -.->|Environment values| backend
+        backend -.->|Optional execution API| sandbox["OpenSandbox private service - optional"]
+        sandbox -.->|Manages execution| pods[Sandbox pods]
+    end
+    backend -->|Private IP - TLS| sql[Cloud SQL PostgreSQL]
+    pvc --> storage[Storage selected by PVC / StorageClass]
+    registry[Artifact Registry] -.->|Container images| web
+    registry -.->|Container images| backend
+```
+
+Terraform creates the cluster and node pool and installs the OpsRabbit Helm
+release. Web and backend run as separate workloads. The backend connects directly
+to Cloud SQL using TLS, rather than using the Cloud Run proxy sidecar. Terraform
+supplies application credentials to the chart's Kubernetes Secret. The database
+host can be overridden with `gke_postgresql_host`. Persistent storage uses the chart's PVC (or a configured existing claim); it is not
+automatically connected to the Cloud Run Filestore share.
+
+### GKE Autopilot (`deployment_mode = "autopilot"`)
+
+```mermaid
+flowchart TB
+    user[Public browser] --> lb["External HTTPS load balancer - custom domain and TLS"]
+    ingress[GKE Ingress configuration] -.->|Provisions routing| lb
+    lb --> websvc
+    subgraph cluster[New GKE Autopilot cluster - Google-managed nodes]
+        websvc[Kubernetes web Service] --> web["OpsRabbit Service and UI - web / nginx pods"]
+        web -->|/api| backsvc[Backend ClusterIP Service]
+        backsvc --> backend["OpsRabbit Platform Agent - backend pod"]
+        backend --> pvc[PersistentVolumeClaim - mounted at /home/opsbot]
+        secret[Kubernetes Secret] -.->|Environment values| backend
+        backend -.->|Optional execution API| sandbox["OpenSandbox private service - optional"]
+        sandbox -.->|Manages execution| pods[Sandbox pods]
+    end
+    backend -->|Private IP - TLS| sql[Cloud SQL PostgreSQL]
+    pvc --> storage[Storage selected by PVC / StorageClass]
+    registry[Artifact Registry] -.->|Container images| web
+    registry -.->|Container images| backend
+```
+
+Autopilot uses the same Helm application, endpoint, database, and storage paths
+as Standard, with Google managing the nodes instead of a Terraform-created node
+pool. Both GKE variants currently require public HTTPS and a customer domain;
+private GKE application access and installation into shared clusters are not supported.
+See [GKE installation sequence](#gke-installation-sequence).
+
+OpenSandbox is disabled by default (`opensandbox_enabled = false`) and is only
+installed for dedicated GKE deployments. The sandbox boxes summarize multiple
+control-plane components, not a single Pod. Autopilot supports sandbox commands
+and file operations, but not browser execution. See the
+[OpenSandbox installation guide](docs/opensandbox-installation.md) for approved
+images, cluster privileges, configuration, and acceptance checks.
+
+The Filestore backup workflow covers Filestore, not GKE PVC data; runtime-specific restore validation
+and the full live acceptance matrix remain outstanding as described in the
+[installer contract](docs/installer-contract.md#current-implementation-boundary).
 
 ## Files
 
@@ -330,6 +448,10 @@ during a routine image upgrade.
 
 ## Private networking
 
+For VPN-only access, use [`private.tfvars.example`](private.tfvars.example). Private mode provisions an
+internal HTTPS load balancer and source allowlist while disabling direct
+Cloud Run URLs. The customer supplies VPN connectivity, DNS and TLS certificates.
+
 ## GKE deployment modes
 
 ### GKE installation sequence
@@ -471,10 +593,6 @@ Do not use this procedure as a zero-downtime migration. For uninterrupted
 cutover, stage Cloud Run on a different IP/hostname and plan DNS traffic
 transition separately. A new customer installation should simply select one
 runtime and does not need the migration flag.
-
-For VPN-only access, use [`private.tfvars.example`](private.tfvars.example). Private mode provisions an
-internal HTTPS load balancer and source allowlist while disabling direct
-Cloud Run URLs. The customer supplies VPN connectivity, DNS and TLS certificates.
 
 ## Destruction protection
 
