@@ -197,17 +197,19 @@ run "event_stream_limits_are_configurable" {
   }
 }
 
-run "agent_state_label_preserves_existing_storage" {
+run "runtime_mounts_only_active_storage" {
   command = plan
   variables { application_enabled = true }
   assert {
-    condition = anytrue([
-      for mount in google_cloud_run_v2_service.opsrabbit[0].template[0].containers[1].volume_mounts :
-      mount.name == "agent-state" && mount.mount_path == "/home/opsbot/.codex"
-      ]) && anytrue([
-      for volume in google_cloud_run_v2_service.opsrabbit[0].template[0].volumes :
-      volume.name == "agent-state" && try(volume.nfs[0].path == "/${var.filestore_share_name}/codex", false)
-    ])
-    error_message = "The neutral volume label must retain the image's runtime path and existing NFS data directory."
+    condition = toset([
+      for mount in google_cloud_run_v2_service.opsrabbit[0].template[0].containers[1].volume_mounts : mount.mount_path
+    ]) == toset(["/home/opsbot/.opsrabbit", "/home/opsbot/git", "/home/opsbot/.agent-browser"])
+    error_message = "The Pi backend needs only application data, Git workspace and browser mounts, without legacy Codex state."
+  }
+  assert {
+    condition = toset([
+      for volume in google_cloud_run_v2_service.opsrabbit[0].template[0].volumes : volume.nfs[0].path
+    ]) == toset(["/${var.filestore_share_name}/application-data", "/${var.filestore_share_name}/git-workspace", "/${var.filestore_share_name}/agent-browser"])
+    error_message = "Keep the three active Filestore paths unchanged and detach only the obsolete Codex directory."
   }
 }

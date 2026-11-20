@@ -111,7 +111,6 @@ persistence:
     - .opsrabbit
     - git
     - .agent-browser
-    - .codex
 
 nodeSelector: {}
 tolerations: []

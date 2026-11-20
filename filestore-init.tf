@@ -39,7 +39,7 @@ resource "google_cloud_run_v2_job" "filestore_init" {
         image   = "docker.io/library/busybox:latest"
         command = ["sh", "-c"]
         args = [
-          "mkdir -p /mnt/share/application-data /mnt/share/git-workspace /mnt/share/agent-browser /mnt/share/codex && chown -R ${var.backend_uid}:${var.backend_gid} /mnt/share && chmod -R u+rwX /mnt/share && echo 'permissions set'"
+          "mkdir -p /mnt/share/application-data /mnt/share/git-workspace /mnt/share/agent-browser && chown -R ${var.backend_uid}:${var.backend_gid} /mnt/share && chmod -R u+rwX /mnt/share && echo 'permissions set'"
         ]
 
         volume_mounts {

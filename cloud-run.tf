@@ -191,11 +191,6 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
         name       = "agent-browser"
         mount_path = "/home/opsbot/.agent-browser"
       }
-      # The image expects this runtime path; keep the existing persistent data.
-      volume_mounts {
-        name       = "agent-state"
-        mount_path = "/home/opsbot/.codex"
-      }
 
       startup_probe {
         initial_delay_seconds = 20
@@ -219,7 +214,7 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
       }
     }
 
-    # Four separate NFS mounts, one per persistent directory the backend
+    # Three separate NFS mounts, one per persistent directory the backend
     # uses -- not one shared mount at /home/opsbot. Each points at its own
     # subdirectory of the same Filestore share.
     volumes {
@@ -245,16 +240,6 @@ resource "google_cloud_run_v2_service" "opsrabbit" {
       nfs {
         server    = local.filestore_ip_address
         path      = "/${var.filestore_share_name}/agent-browser"
-        read_only = false
-      }
-    }
-
-    # Preserve the on-disk directory across upgrades; only the volume label changes.
-    volumes {
-      name = "agent-state"
-      nfs {
-        server    = local.filestore_ip_address
-        path      = "/${var.filestore_share_name}/codex"
         read_only = false
       }
     }
