@@ -334,18 +334,23 @@ and delete the temporary secret. Never put an ECR token in a build substitution,
 source file, command argument, or log. A failed copy must not be treated as a
 published release merely because some layers landed in Artifact Registry.
 
-If running this **before the infrastructure bootstrap**, import the newly created
-repository into the initialized Terraform backend and generate a fresh plan:
+If running this **before the infrastructure bootstrap**, or reusing a retained
+repository after teardown, first check `terraform state list`. If the repository
+exists in GCP but is not in this state, add an installation-local `registry-import.tf`:
 
-```bash
-terraform import google_artifact_registry_repository.opsrabbit \
-  projects/my-gcp-project/locations/us-central1/repositories/opsrabbit
-terraform plan -out=bootstrap.tfplan
+```hcl
+import {
+  to = google_artifact_registry_repository.opsrabbit
+  id = "projects/my-gcp-project/locations/us-central1/repositories/opsrabbit"
+}
 ```
 
-Use your actual project, region, and repository in the import ID.
-Terraform authentication and deployment variables are required for
-import. Do not reuse a plan saved before the import.
+Use your actual project, region, and repository in the import ID. Generate a fresh
+deployment plan and verify that it imports the existing registry before applying.
+Configuration-based import also works before a new GKE cluster exists; the legacy
+`terraform import` command can fail because the Helm provider endpoint is not yet
+known. Remove the local import file after a successful apply. Do not import a
+repository already owned by another installation's state or commit customer IDs.
 
 Alternatively, copy the images manually:
 
@@ -475,8 +480,9 @@ Cloud Run URLs. The customer supplies VPN connectivity, DNS and TLS certificates
    bootstrap apply or Filestore initialization job for GKE.
 3. Supply immutable backend and web Artifact Registry image references **before** planning.
    If the approved images already exist, reuse their digests; no copy is needed.
-   Otherwise follow step 5 above to copy them and import the repository only if
-   it is not already in this Terraform state. Also supply all six `opensandbox_images`
+   Otherwise follow step 5 above to copy them. Whether images were copied or retained,
+   use the import block above if their registry is not already in this Terraform state.
+   Also supply all six `opensandbox_images`
    digests and complete the [sandbox prerequisites](docs/opensandbox-installation.md#before-applying).
    No enable flag is needed. The sandbox installs even if `application_enabled = false`,
    because that flag only controls Cloud Run.
