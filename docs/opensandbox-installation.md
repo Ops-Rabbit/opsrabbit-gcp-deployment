@@ -1,8 +1,9 @@
 # Install OpenSandbox with OpsRabbit
 
-This option installs the OpenSandbox 1.1.1 Kubernetes components and configures
+Every GKE installation includes the OpenSandbox 1.1.1 Kubernetes components and configures
 a fresh OpsRabbit database to use them. It is for a dedicated Standard or
-Autopilot cluster owned by this installer. It is disabled by default.
+Autopilot cluster owned by this installer. It cannot be disabled through Terraform.
+Cloud Run does not install OpenSandbox and is unchanged by this requirement.
 
 ## Before applying
 
@@ -27,7 +28,7 @@ Autopilot cluster owned by this installer. It is disabled by default.
   The controller and server have cluster-wide privileges. Namespaces do not
   restrict those privileges. Autopilot additionally enables `allow_net_admin`
   so the network-filtering sidecar can enforce the requested egress policy.
-  This option is not supported for shared clusters.
+  Installation is not supported for shared clusters.
 - Both managed cluster modes use IPv4-only Pod ranges. The server therefore
   disables the upstream privileged IPv6-disable init container. Standard retains
   the upstream workspace-only profile, including workload SYS_ADMIN for nested
@@ -46,7 +47,6 @@ Add to the same private input file as the installation:
 
 ```hcl
 deployment_mode = "standard" # or "autopilot"
-opensandbox_enabled = true
 opensandbox_namespace = "opensandbox-system"
 opensandbox_workload_namespace = "opensandbox"
 opensandbox_images = {
@@ -92,6 +92,19 @@ Repeat independently on Standard and Autopilot. Never report skipped checks as
 passing. Workspace-only execution requires the sandbox image's Bubblewrap
 runtime to work under the cluster's admission and node security policies.
 
+## Upgrading from optional sandbox installation
+
+Remove `opensandbox_enabled = false` from GKE input files; it now fails validation.
+Omitting the input (or setting it to null) selects the required behavior by mode.
+An existing `true` value remains accepted for GKE, but is unnecessary. Cloud Run
+continues to accept an omitted, null or false value and rejects true.
+
+Supply all six approved image digests before planning. Existing sandbox resource
+addresses are unchanged, so enabling this requirement does not itself replace
+already-managed releases or rotate their keys. A GKE installation that previously
+omitted OpenSandbox will plan its components and the first-time product bootstrap.
+Review the added cluster privileges and resource costs before applying.
+
 ## Retry, upgrade and recovery
 
 Reapply a failed plan after correcting its reported prerequisite. Keys are stable
@@ -120,19 +133,38 @@ process, roll the server/gateway to load it, and update the endpoint-bound API k
 in OpsRabbit. Bootstrap never rotates keys. Back up both application encryption
 keys and sandbox credentials using your approved recovery process.
 
-## Disable or uninstall
+## Uninstall
 
-First disable sandbox execution in OpsRabbit and retire active sandboxes. Then
-set `opensandbox_enabled = false` and review/apply the plan. Helm removes the
-component releases; upstream CRDs are retained. The helper-created namespaces
-and Secrets are also retained to prevent accidental key loss. After verifying
-there are no workloads or other users of those resources, the cluster owner may
-remove the exact installation namespaces and retained CRDs explicitly.
-Destroying the dedicated cluster removes them with the cluster. Never delete
-shared platform resources or another installation's registry/state/backups.
+There is no supported sandbox-only opt-out for a GKE installation. Setting
+`opensandbox_enabled = false` fails planning rather than removing the runtime.
+For a full teardown, retire active sandboxes and follow the README's destroy
+procedure, including deletion-protection changes. Keep valid GKE image inputs
+while preparing the destroy; do not switch deployment modes to bypass validation.
+
+Terraform removes the Helm releases during destroy. Upstream CRDs and helper-created
+namespaces and Secrets may remain until the dedicated cluster is removed. Never
+delete another installation's registry, state, backups or shared platform resources.
 
 ## Validation status
 
 Local Terraform, chart and helper tests do not establish live compatibility.
 Record the release digests and independent Standard/Autopilot execution results
 before describing a release as validated for customer use.
+
+### Mandatory GKE installation checks — 2026-11-24
+
+SKILLS-143 follow-up: derive installation from the selected GKE mode, reject
+legacy opt-outs, require pinned images, and preserve existing resource addresses.
+The compatibility input is validated but never controls resource selection.
+This is an installer requirement, not a change to application administrator
+permissions: existing settings remain preserved and routine applies do not
+re-enable execution after an administrator disables it. Verify such settings
+explicitly before accepting an upgraded or restored installation.
+
+`make check` passed: 83 mocked Terraform plans, 45 Python tests, Terraform format,
+validate and TFLint, Helm lint/render checks, and the existing Trivy configuration
+scans. Cases cover both GKE defaults, null/true compatibility, rejected opt-outs,
+missing/malformed images, and unchanged Cloud Run behavior. Existing CI runs
+these suites automatically; no pipeline change is needed. The scans do not
+replace release-image security approval or remove the documented upstream RBAC
+trust requirement. No live deployment or merge was performed for this change.

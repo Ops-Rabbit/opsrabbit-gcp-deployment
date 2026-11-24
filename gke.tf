@@ -131,7 +131,7 @@ resource "google_container_cluster" "autopilot" {
   deletion_protection = var.gke_deletion_protection
   # Required only by OpenSandbox's egress sidecar; sandbox commands do not
   # receive NET_ADMIN. Upstream dns+nft enforcement must remain enabled.
-  allow_net_admin = var.opensandbox_enabled
+  allow_net_admin = local.opensandbox_required
 
   ip_allocation_policy {
     stack_type = "IPV4"

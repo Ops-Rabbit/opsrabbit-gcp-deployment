@@ -19,11 +19,11 @@ Choose one application runtime. The diagrams below describe the checked-in
 Terraform installer and bundled Helm chart; custom chart values can change
 workload and storage details.
 
-| Option | Compute management | Application access | Persistent files | Optional OpenSandbox |
+| Option | Compute management | Application access | Persistent files | OpenSandbox |
 |---|---|---|---|---|
 | `cloud_run` (default) | Cloud Run service with one warm instance per revision | Public native URL or custom domain; private internal HTTPS also supported | Filestore NFS mounts | Not provisioned |
-| `standard` | New GKE Standard cluster with a configured node pool | Public HTTPS with a customer domain | PVC or existing claim | Supported on dedicated clusters |
-| `autopilot` | New GKE Autopilot cluster with Google-managed nodes | Public HTTPS with a customer domain | PVC or existing claim | Supported for commands and file operations; browser execution unsupported |
+| `standard` | New GKE Standard cluster with a configured node pool | Public HTTPS with a customer domain | PVC or existing claim | Required; installed and configured automatically |
+| `autopilot` | New GKE Autopilot cluster with Google-managed nodes | Public HTTPS with a customer domain | PVC or existing claim | Required for commands and file operations; browser execution unsupported |
 
 The application names used in customer architecture diagrams map as follows:
 
@@ -35,7 +35,7 @@ The application names used in customer architecture diagrams map as follows:
 
 These are logical responsibilities: nginx and the UI do not require separate
 workloads. Solid arrows below show application traffic or storage access; dotted
-arrows show provisioning, image delivery, secret injection, or optional sandbox
+arrows show provisioning, image delivery, secret injection, or sandbox
 execution. Browser API requests return through nginx to the backend. GKE Ingress
 configures the load balancer; its controller is not a request-processing hop.
 
@@ -85,7 +85,7 @@ flowchart TB
         backsvc --> backend["OpsRabbit Platform Agent - backend pod"]
         backend --> pvc[PersistentVolumeClaim - mounted at /home/opsbot]
         secret[Kubernetes Secret] -.->|Environment values| backend
-        backend -.->|Optional execution API| sandbox["OpenSandbox private service - optional"]
+        backend -.->|Execution API| sandbox["OpenSandbox private service - required"]
         sandbox -.->|Manages execution| pods[Sandbox pods]
     end
     backend -->|Private IP - TLS| sql[Cloud SQL PostgreSQL]
@@ -114,7 +114,7 @@ flowchart TB
         backsvc --> backend["OpsRabbit Platform Agent - backend pod"]
         backend --> pvc[PersistentVolumeClaim - mounted at /home/opsbot]
         secret[Kubernetes Secret] -.->|Environment values| backend
-        backend -.->|Optional execution API| sandbox["OpenSandbox private service - optional"]
+        backend -.->|Execution API| sandbox["OpenSandbox private service - required"]
         sandbox -.->|Manages execution| pods[Sandbox pods]
     end
     backend -->|Private IP - TLS| sql[Cloud SQL PostgreSQL]
@@ -129,9 +129,10 @@ pool. Both GKE variants currently require public HTTPS and a customer domain;
 private GKE application access and installation into shared clusters are not supported.
 See [GKE installation sequence](#gke-installation-sequence).
 
-OpenSandbox is disabled by default (`opensandbox_enabled = false`) and is only
-installed for dedicated GKE deployments. The sandbox boxes summarize multiple
-control-plane components, not a single Pod. Autopilot supports sandbox commands
+OpenSandbox is mandatory for Standard and Autopilot and is installed automatically.
+It is not provisioned for Cloud Run. GKE plans require all six approved sandbox
+image digests; `opensandbox_enabled = false` is rejected for GKE. The sandbox
+boxes summarize multiple control-plane components, not a single Pod. Autopilot supports sandbox commands
 and file operations, but not browser execution. See the
 [OpenSandbox installation guide](docs/opensandbox-installation.md) for approved
 images, cluster privileges, configuration, and acceptance checks.
@@ -165,7 +166,7 @@ The component and storage responsibilities are also explained in the
 
 ## Helm deployment
 
-For the optional managed sandbox service on dedicated GKE Standard or Autopilot,
+For the required managed sandbox service on dedicated GKE Standard or Autopilot,
 see [OpenSandbox installation](docs/opensandbox-installation.md). This installs
 the private service and initializes a fresh OpsRabbit instance automatically;
 existing administrator settings are preserved.
@@ -472,10 +473,13 @@ Cloud Run URLs. The customer supplies VPN connectivity, DNS and TLS certificates
 2. Set `deployment_mode` to `standard` or `autopilot` and
    `application_enabled = true`. Do not use Cloud Run's
    bootstrap apply or Filestore initialization job for GKE.
-3. Supply both immutable Artifact Registry image references **before** planning.
+3. Supply immutable backend and web Artifact Registry image references **before** planning.
    If the approved images already exist, reuse their digests; no copy is needed.
    Otherwise follow step 5 above to copy them and import the repository only if
-   it is not already in this Terraform state.
+   it is not already in this Terraform state. Also supply all six `opensandbox_images`
+   digests and complete the [sandbox prerequisites](docs/opensandbox-installation.md#before-applying).
+   No enable flag is needed. The sandbox installs even if `application_enabled = false`,
+   because that flag only controls Cloud Run.
 4. Set a customer-owned HTTPS `application_origin`. Supply
    `endpoint_dns_managed_zone` for installer-managed Cloud DNS, or arrange access
    to the external DNS provider to publish the resulting A record. A placeholder
