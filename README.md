@@ -185,6 +185,9 @@ make helm-test
 ## Prerequisites
 
 - A GCP project with billing enabled
+- For GKE, check regional SSD quota for node boot disks, the default `100Gi`
+  application PVC (according to its storage class), and other deployments sharing
+  the quota. Include all zones of regional node pools and upgrade capacity.
 - A deployment identity able to enable APIs, create resources/service accounts/custom roles, manage project and secret IAM, and act as the runtime, workflow, and scheduler service accounts (`roles/editor` alone is insufficient)
 - `gcloud` CLI authenticated to the target project
 - Terraform `>= 1.15`; Google providers pinned by `.terraform.lock.hcl` (Google Beta 6.50.0 is required for private ingress)
@@ -660,6 +663,18 @@ creation never triggers pruning. Backups incur storage charges and survive
 removal of the schedule. Manual backups without the ownership label are retained.
 These file backups and Cloud SQL PITR are separate recovery points; coordinated
 application recovery requires quiescing writes and selecting compatible points.
+
+When reprovisioning, a deleted custom IAM role ID can remain unavailable for reuse;
+see Google's [custom role lifecycle guidance](https://docs.cloud.google.com/iam/docs/creating-custom-roles).
+If backup role creation fails for that reason, set `filestore_backup_role_id` to a
+fresh ID in the installation's private tfvars and review a full plan against the
+same retained state. IDs must contain 3–64 letters, digits, underscores or periods.
+Omitting the input or setting it to null preserves the existing default ID.
+Only the role ID is configurable: permissions, project scope, Terraform resource
+addresses and other backup resource names stay unchanged. Do not change
+`name_prefix` to work around this failure. Keep the selected ID after recovery;
+changing or removing it can replace the role. Confirm that the plan does not
+replace unrelated retained resources before applying.
 
 Run an initial backup and inspect its execution before production use:
 

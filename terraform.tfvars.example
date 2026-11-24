@@ -55,6 +55,9 @@ filestore_tier        = "BASIC_HDD"
 filestore_capacity_gb = 1024 # BASIC_SSD requires at least 2560 GiB
 filestore_share_name  = "opsrabbit"
 filestore_backup_retention_days = 14
+# Optional recovery from a deleted custom role name; null keeps the default ID.
+# Keep the chosen ID in installation inputs after recovery (see README).
+# filestore_backup_role_id = "opsrabbit_backup_v2"
 
 # Determine with: docker run --rm --entrypoint sh <backend_image> -c "id -u; id -g"
 backend_uid = 1000
