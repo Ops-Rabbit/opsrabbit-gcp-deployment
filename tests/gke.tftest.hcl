@@ -25,6 +25,14 @@ variables {
   opsrabbit_encryption_key          = "test-key"
   backend_uid                       = 1000
   backend_gid                       = 1000
+  opensandbox_images = {
+    controller = "us-central1-docker.pkg.dev/test-project/opsrabbit/controller@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    server     = "us-central1-docker.pkg.dev/test-project/opsrabbit/server@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    gateway    = "us-central1-docker.pkg.dev/test-project/opsrabbit/gateway@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    execd      = "us-central1-docker.pkg.dev/test-project/opsrabbit/execd@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    egress     = "us-central1-docker.pkg.dev/test-project/opsrabbit/egress@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    sandbox    = "us-central1-docker.pkg.dev/test-project/opsrabbit/sandbox@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  }
 }
 
 run "gke_is_disabled_by_default" {

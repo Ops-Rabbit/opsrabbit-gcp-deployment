@@ -24,6 +24,20 @@ allow_unauthenticated = true
 backend_image = "us-central1-docker.pkg.dev/my-gcp-project/opsrabbit/backend@sha256:REPLACE_ME"
 web_image     = "us-central1-docker.pkg.dev/my-gcp-project/opsrabbit/web@sha256:REPLACE_ME"
 
+# ---- Required for Standard and Autopilot ----
+# OpenSandbox installs automatically with GKE; do not set opensandbox_enabled=false.
+# Copy this map into your GKE inputs and replace every digest with an approved image.
+# Cloud Run does not require or install these images.
+# See docs/opensandbox-installation.md for compatible releases and prerequisites.
+# opensandbox_images = {
+#   controller = "us-central1-docker.pkg.dev/my-gcp-project/opsrabbit/controller@sha256:REPLACE_ME"
+#   server     = "us-central1-docker.pkg.dev/my-gcp-project/opsrabbit/server@sha256:REPLACE_ME"
+#   gateway    = "us-central1-docker.pkg.dev/my-gcp-project/opsrabbit/gateway@sha256:REPLACE_ME"
+#   execd      = "us-central1-docker.pkg.dev/my-gcp-project/opsrabbit/execd@sha256:REPLACE_ME"
+#   egress     = "us-central1-docker.pkg.dev/my-gcp-project/opsrabbit/egress@sha256:REPLACE_ME"
+#   sandbox    = "us-central1-docker.pkg.dev/my-gcp-project/opsrabbit/sandbox@sha256:REPLACE_ME"
+# }
+
 # ---- Request handling ----
 # Open event streams count against concurrency; retain capacity for other API calls.
 cloud_run_concurrency             = 20
@@ -41,6 +55,9 @@ filestore_tier        = "BASIC_HDD"
 filestore_capacity_gb = 1024 # BASIC_SSD requires at least 2560 GiB
 filestore_share_name  = "opsrabbit"
 filestore_backup_retention_days = 14
+# Optional recovery from a deleted custom role name; null keeps the default ID.
+# Keep the chosen ID in installation inputs after recovery (see README).
+# filestore_backup_role_id = "opsrabbit_backup_v2"
 
 # Determine with: docker run --rm --entrypoint sh <backend_image> -c "id -u; id -g"
 backend_uid = 1000

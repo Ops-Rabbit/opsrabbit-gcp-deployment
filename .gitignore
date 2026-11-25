@@ -31,6 +31,9 @@ terraform.rc
 # Backend config, likely environment-specific -- keep backend.tf.example instead
 backend.tf
 
+# Installation-local import of a retained image registry.
+registry-import.tf
+
 # Lock file: DO commit .terraform.lock.hcl for reproducible provider
 # versions across the team and CI -- intentionally NOT listed here.
 

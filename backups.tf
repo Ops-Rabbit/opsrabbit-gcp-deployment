@@ -8,7 +8,7 @@ resource "google_service_account" "backup" {
 
 resource "google_project_iam_custom_role" "backup" {
   project = var.project_id
-  role_id = "${replace(var.name_prefix, "-", "_")}_backup"
+  role_id = var.filestore_backup_role_id != null ? var.filestore_backup_role_id : "${replace(var.name_prefix, "-", "_")}_backup"
   title   = "OpsRabbit Filestore backup maintenance"
   permissions = [
     "file.instances.get", "file.backups.create", "file.backups.get",

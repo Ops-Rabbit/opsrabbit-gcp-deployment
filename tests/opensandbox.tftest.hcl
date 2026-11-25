@@ -30,18 +30,18 @@ variables {
     sandbox    = "us-central1-docker.pkg.dev/test-project/opsrabbit/sandbox@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
   }
 }
-run "disabled_installs_nothing" {
+run "cloud_run_installs_no_sandbox" {
   command = plan
+  variables { opensandbox_images = {} }
   assert {
-    condition     = length(helm_release.opensandbox_base) == 0 && length(terraform_data.opensandbox_bootstrap) == 0
-    error_message = "OpenSandbox must remain opt-in."
+    condition     = length(helm_release.opensandbox_base) == 0 && length(helm_release.opensandbox_controller) == 0 && length(helm_release.opensandbox_gateway) == 0 && length(helm_release.opensandbox_server) == 0 && length(terraform_data.opensandbox_credentials) == 0 && length(terraform_data.opensandbox_bootstrap) == 0
+    error_message = "Cloud Run must not create GKE sandbox resources."
   }
 }
 run "standard_private_services_and_activation" {
   command = plan
   variables {
     deployment_mode                = "standard"
-    opensandbox_enabled            = true
     opensandbox_workload_namespace = "sandbox-work"
   }
   assert {
@@ -84,7 +84,6 @@ run "autopilot_private_services_and_activation" {
   command = plan
   variables {
     deployment_mode                = "autopilot"
-    opensandbox_enabled            = true
     opensandbox_workload_namespace = "sandbox-work"
   }
   assert {
@@ -122,17 +121,15 @@ run "reject_cloud_run" {
 run "reject_incomplete_images" {
   command = plan
   variables {
-    deployment_mode     = "standard"
-    opensandbox_enabled = true
-    opensandbox_images  = {}
+    deployment_mode    = "standard"
+    opensandbox_images = {}
   }
   expect_failures = [var.opensandbox_images]
 }
 run "reject_tag_plus_digest" {
   command = plan
   variables {
-    deployment_mode     = "standard"
-    opensandbox_enabled = true
+    deployment_mode = "standard"
     opensandbox_images = {
       controller = "us-central1-docker.pkg.dev/test-project/opsrabbit/controller:release-1.1.1@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
       server     = "us-central1-docker.pkg.dev/test-project/opsrabbit/server@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
@@ -143,4 +140,97 @@ run "reject_tag_plus_digest" {
     }
   }
   expect_failures = [var.opensandbox_images]
+}
+
+run "standard_rejects_opt_out" {
+  command = plan
+  variables {
+    deployment_mode     = "standard"
+    opensandbox_enabled = false
+  }
+  expect_failures = [var.opensandbox_enabled]
+}
+run "standard_rejects_missing_images_without_enable_flag" {
+  command = plan
+  variables {
+    deployment_mode    = "standard"
+    opensandbox_images = {}
+  }
+  expect_failures = [var.opensandbox_images]
+}
+run "standard_accepts_legacy_true" {
+  command = plan
+  variables {
+    deployment_mode     = "standard"
+    opensandbox_enabled = true
+    application_enabled = true
+  }
+  assert {
+    condition     = length(helm_release.opensandbox_server) == 1 && length(terraform_data.opensandbox_credentials) == 1 && length(terraform_data.opensandbox_bootstrap) == 1
+    error_message = "Existing enabled installations must retain service, credentials and bootstrap addresses."
+  }
+}
+run "standard_null_cannot_skip_sandbox" {
+  command = plan
+  variables {
+    deployment_mode     = "standard"
+    opensandbox_enabled = null
+  }
+  assert {
+    condition     = length(helm_release.opensandbox_server) == 1 && length(terraform_data.opensandbox_bootstrap) == 1
+    error_message = "Explicit null must behave like omission, not disable GKE sandbox installation."
+  }
+}
+
+run "autopilot_rejects_opt_out" {
+  command = plan
+  variables {
+    deployment_mode     = "autopilot"
+    opensandbox_enabled = false
+  }
+  expect_failures = [var.opensandbox_enabled]
+}
+run "autopilot_rejects_missing_images_without_enable_flag" {
+  command = plan
+  variables {
+    deployment_mode    = "autopilot"
+    opensandbox_images = {}
+  }
+  expect_failures = [var.opensandbox_images]
+}
+run "autopilot_accepts_legacy_true" {
+  command = plan
+  variables {
+    deployment_mode     = "autopilot"
+    opensandbox_enabled = true
+    application_enabled = true
+  }
+  assert {
+    condition     = length(helm_release.opensandbox_server) == 1 && length(terraform_data.opensandbox_credentials) == 1 && length(terraform_data.opensandbox_bootstrap) == 1
+    error_message = "Existing enabled installations must retain service, credentials and bootstrap addresses."
+  }
+}
+run "autopilot_null_cannot_skip_sandbox" {
+  command = plan
+  variables {
+    deployment_mode     = "autopilot"
+    opensandbox_enabled = null
+  }
+  assert {
+    condition     = length(helm_release.opensandbox_server) == 1 && length(terraform_data.opensandbox_bootstrap) == 1
+    error_message = "Explicit null must behave like omission, not disable GKE sandbox installation."
+  }
+}
+
+run "cloud_run_accepts_legacy_false_without_images" {
+  command = plan
+  variables {
+    opensandbox_enabled = false
+    opensandbox_images  = {}
+    application_enabled = true
+  }
+  assert {
+    condition     = length(google_cloud_run_v2_service.opsrabbit) == 1 && length(helm_release.opensandbox_server) == 0 && length(terraform_data.opensandbox_bootstrap) == 0
+    error_message = "Cloud Run application behavior must be unchanged."
+  }
 }

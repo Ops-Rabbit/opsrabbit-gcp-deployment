@@ -1,10 +1,12 @@
+# Retained only to validate legacy inputs; resource selection is mode-derived.
+# tflint-ignore: terraform_unused_declarations
 variable "opensandbox_enabled" {
-  description = "Install the private OpenSandbox Kubernetes service on GKE."
+  description = "Deprecated compatibility input. Omit it: OpenSandbox is required for Standard and Autopilot and unavailable on Cloud Run. Explicit values must match the deployment mode."
   type        = bool
-  default     = false
+  default     = null
   validation {
-    condition     = !var.opensandbox_enabled || contains(["standard", "autopilot"], var.deployment_mode)
-    error_message = "OpenSandbox installation requires GKE Standard or Autopilot."
+    condition     = var.opensandbox_enabled == null ? true : var.opensandbox_enabled == contains(["standard", "autopilot"], var.deployment_mode)
+    error_message = "OpenSandbox is mandatory for GKE Standard and Autopilot and unavailable on Cloud Run. Remove opensandbox_enabled; false is not allowed for GKE and true is not allowed for Cloud Run."
   }
 }
 
@@ -13,7 +15,7 @@ variable "opensandbox_images" {
   type        = map(string)
   default     = {}
   validation {
-    condition = !var.opensandbox_enabled || alltrue([
+    condition = !local.opensandbox_required || alltrue([
       for component in ["controller", "server", "gateway", "execd", "egress", "sandbox"] :
       can(regex("^[a-z0-9-]+-docker[.]pkg[.]dev/[a-z0-9._-]+/[a-z0-9._-]+/[a-z0-9._/-]+@sha256:[0-9a-f]{64}$", lookup(var.opensandbox_images, component, "")))
     ])
@@ -22,6 +24,7 @@ variable "opensandbox_images" {
 }
 
 locals {
+  opensandbox_required = contains(["standard", "autopilot"], var.deployment_mode)
   opensandbox_pod_security = {
     runAsNonRoot   = true
     runAsUser      = 10001
@@ -75,7 +78,7 @@ variable "opensandbox_signing_secret" {
 }
 
 resource "helm_release" "opensandbox_base" {
-  count            = var.opensandbox_enabled ? 1 : 0
+  count            = local.opensandbox_required ? 1 : 0
   name             = "opsrabbit-opensandbox-base"
   namespace        = var.opensandbox_namespace
   create_namespace = true
@@ -94,12 +97,12 @@ resource "helm_release" "opensandbox_base" {
 }
 
 resource "terraform_data" "opensandbox_cluster_identity" {
-  count            = var.opensandbox_enabled ? 1 : 0
+  count            = local.opensandbox_required ? 1 : 0
   triggers_replace = [local.gke_cluster_endpoint, local.gke_cluster_ca_certificate]
 }
 
 resource "terraform_data" "opensandbox_credentials" {
-  count = var.opensandbox_enabled ? 1 : 0
+  count = local.opensandbox_required ? 1 : 0
   # Endpoint becomes unknown on cluster replacement, including replacement with
   # the same name. Recreate credentials in the new cluster in that case.
   triggers_replace = [local.gke_cluster_name, local.gke_cluster_location, try(google_container_cluster.opsrabbit[0].endpoint, google_container_cluster.autopilot[0].endpoint, ""), var.opensandbox_namespace, var.opensandbox_workload_namespace, var.opensandbox_api_key_secret, var.opensandbox_signing_secret]
@@ -120,7 +123,7 @@ resource "terraform_data" "opensandbox_credentials" {
 }
 
 resource "helm_release" "opensandbox_controller" {
-  count     = var.opensandbox_enabled ? 1 : 0
+  count     = local.opensandbox_required ? 1 : 0
   name      = "opsrabbit-opensandbox-controller"
   namespace = var.opensandbox_namespace
   chart     = "${path.module}/charts/vendor/opensandbox-controller"
@@ -139,7 +142,7 @@ resource "helm_release" "opensandbox_controller" {
 }
 
 resource "helm_release" "opensandbox_gateway" {
-  count     = var.opensandbox_enabled ? 1 : 0
+  count     = local.opensandbox_required ? 1 : 0
   name      = "opsrabbit-opensandbox-gateway"
   namespace = var.opensandbox_namespace
   chart     = "${path.module}/charts/vendor/ingress-gateway"
@@ -165,7 +168,7 @@ resource "helm_release" "opensandbox_gateway" {
 }
 
 resource "helm_release" "opensandbox_server" {
-  count     = var.opensandbox_enabled ? 1 : 0
+  count     = local.opensandbox_required ? 1 : 0
   name      = "opsrabbit-opensandbox-server"
   namespace = var.opensandbox_namespace
   chart     = "${path.module}/charts/vendor/opensandbox-server"
@@ -229,7 +232,7 @@ resource "helm_release" "opensandbox_server" {
 }
 
 resource "terraform_data" "opensandbox_bootstrap" {
-  count = var.opensandbox_enabled ? 1 : 0
+  count = local.opensandbox_required ? 1 : 0
   # Activation is first-install only. In-place upgrades and credential/cluster
   # reconciliation must not reactivate a configuration reset by an admin.
   # Explicit reinitialization uses Terraform's -replace after operator review.

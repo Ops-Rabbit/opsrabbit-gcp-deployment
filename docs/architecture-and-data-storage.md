@@ -16,9 +16,9 @@ OpsRabbit separates the browser experience, HTTP routing, and agent execution in
 
 The diagram can retain all three boxes. OpsRabbit Service and OpsRabbit UI represent different responsibilities, but nginx and the frontend assets are packaged together in the web container. On GKE, the backend is a separate pod workload. On Cloud Run, web and backend are separate containers within the same Cloud Run service.
 
-### Optional sandbox execution
+### Sandbox execution
 
-OpenSandbox provides isolated environments for agent command and code execution. The backend calls the private OpenSandbox service, which coordinates sandbox pods. The installer supports this optional component on GKE Standard and Autopilot; it is disabled by default and is not provisioned by the Cloud Run variant.
+OpenSandbox provides isolated environments for agent command and code execution. The backend calls the private OpenSandbox service, which coordinates sandbox pods. The installer requires this component on GKE Standard and Autopilot and installs it automatically. The Cloud Run variant does not provision it.
 
 ## How a request moves through the system
 
@@ -46,7 +46,7 @@ An external system can call a configured inbound endpoint through the applicatio
 | Cloud Armor | Filters traffic through configured policies. The private Cloud Run path includes a source-IP allowlist; the public Terraform path does not currently attach an Armor policy. |
 | GKE Gateway Controller | Represents routing management. The checked-in GKE implementation uses GKE Ingress rather than Gateway API. A controller manages routing; application requests do not pass through the controller process. |
 | Gemini Enterprise | Represents the intended AI integration. Confirm the exact service and API, including whether Gemini models through Vertex AI are intended. This repository does not configure that integration. |
-| OpenSandbox Service | Optional private GKE service for isolated execution. Show a backend-to-service connection and, if useful, a separate sandbox pods box. |
+| OpenSandbox Service | Required private GKE service for isolated execution. Show a backend-to-service connection and, if useful, a separate sandbox pods box. |
 
 ForgeRock, Equinix connectivity, Jira, ServiceNow, Dynatrace, SentinelOne and external logging destinations are customer integration elements in the supplied diagram. Their presence in the diagram does not establish that this deployment provisions or configures them.
 
@@ -108,6 +108,6 @@ Rotation and recovery: previous Secret Manager versions are retained for rollbac
 | Persistent files | Direct NFS mounts from Filestore. | PVC or existing claim selected through chart configuration. |
 | Application secrets | Secret Manager version references. | Kubernetes Secret supplied by Terraform. |
 | Ingress | Public HTTPS or private internal HTTPS; native URL also supported. | Public custom-domain HTTPS through GKE Ingress. |
-| Sandbox | Not provisioned by this variant. | Optional OpenSandbox service and sandbox pods. |
+| Sandbox | Not provisioned by this variant. | Required OpenSandbox service and sandbox pods. |
 
 Implementation references: GCP deployment cloud-run.tf, gke.tf, main.tf, secrets.tf, ingress files, opensandbox.tf and charts/opsrabbit; product database schemas. Deployed-image verification is deferred. Live acceptance and restore validation remain separate activities.

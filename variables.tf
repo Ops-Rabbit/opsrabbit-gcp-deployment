@@ -358,6 +358,17 @@ variable "application_enabled" {
   default     = false
 }
 
+variable "filestore_backup_role_id" {
+  description = "Optional custom role ID for Filestore backups when reprovisioning encounters a deleted role name. Null preserves the name_prefix-derived ID. Keep an override in installation inputs; changing it replaces the role."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.filestore_backup_role_id == null ? true : can(regex("^[A-Za-z0-9_.]{3,64}$", var.filestore_backup_role_id))
+    error_message = "filestore_backup_role_id must be null or a 3-64 character role ID containing only letters, digits, underscores and periods (not a full resource path)."
+  }
+}
+
 variable "filestore_backup_retention_days" {
   description = "Daily backups retained for this many days; pruning occurs only after a successful new backup."
   type        = number
