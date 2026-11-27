@@ -12,7 +12,7 @@ annotations:
   artifacthub.io/recommendations: |
     - url: https://github.com/kubernetes-sigs/kind
 apiVersion: v2
-appVersion: 1.1.1
+appVersion: 1.2.1
 description: A Kubernetes operator for managing sandbox environments with resource
   pooling and batch delivery
 home: https://github.com/opensandbox-group/OpenSandbox
@@ -30,4 +30,4 @@ name: opensandbox-controller
 sources:
 - https://github.com/opensandbox-group/OpenSandbox/tree/main/manifests/charts/controller
 type: application
-version: 1.1.1
+version: 1.2.1

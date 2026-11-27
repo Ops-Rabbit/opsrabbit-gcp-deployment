@@ -32,7 +32,7 @@ class OpenSandboxCharts(unittest.TestCase):
             }),
         ]
         for chart, component, name, overrides in fixtures:
-            image = {"repository": "us-central1-docker.pkg.dev/test-project/opsrabbit/" + component, "tag": "release-1.1.1@sha256:" + "a" * 64}
+            image = {"repository": "us-central1-docker.pkg.dev/test-project/opsrabbit/" + component, "tag": "release-1.2.1@sha256:" + "a" * 64}
             values = {"namespaceOverride": "test-system", "fullnameOverride": name, component: {"image": image, **overrides}}
             result = subprocess.run(["helm", "template", "opsrabbit-test", str(VENDOR / chart), "--namespace", "test-system", "-f", "-"], input=json.dumps(values), capture_output=True, text=True, timeout=30)
             self.assertEqual(result.returncode, 0, result.stderr)

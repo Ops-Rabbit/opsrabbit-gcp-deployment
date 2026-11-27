@@ -63,6 +63,10 @@ run "standard_private_services_and_activation" {
     error_message = "Sandbox services must not have public endpoints."
   }
   assert {
+    condition     = !yamldecode(helm_release.opensandbox_gateway[0].values[0]).gateway.wake.enabled
+    error_message = "The GKE BatchSandbox installer must keep Fast Sandbox wake-on-access disabled."
+  }
+  assert {
     condition     = yamldecode(helm_release.opensandbox_server[0].values[0]).fullnameOverride == "opensandbox-server" && yamldecode(helm_release.opensandbox_gateway[0].values[0]).fullnameOverride == "opensandbox-ingress-gateway"
     error_message = "Service names must match bootstrap and gateway routing."
   }

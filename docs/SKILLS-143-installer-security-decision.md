@@ -14,6 +14,11 @@ therefore trusts these components with cluster-wide access; it does not claim
 namespace-restricted RBAC. Shared-cluster support requires separate design and
 acceptance before it can be enabled.
 
+The 1.2.1 server chart also grants `patch` on `sandbox.fast.io/sandboxes` for
+upstream idle-policy annotations. This installer disables the Fast Sandbox CRDs
+and gateway wake-on-access. The server's permissions still apply cluster-wide
+where those resources exist.
+
 Owner clarification on 2026-11-02 limits immediate delivery to dedicated Standard
 and Autopilot installations. Shared GKE is a future requirement. Keep upstream
 permissions explicit, separate cluster prerequisites from application releases,
