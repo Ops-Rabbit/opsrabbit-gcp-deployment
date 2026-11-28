@@ -2,8 +2,8 @@
 
 These readable chart directories were extracted from packages generated with
 `helm package` from upstream OpenSandbox
-commit `531700ca18a7fa5fab6a2f25d6dc68a76eddab12`, release 1.1.1.
-Source: https://github.com/opensandbox-group/OpenSandbox/tree/531700ca18a7fa5fab6a2f25d6dc68a76eddab12/manifests/charts
+commit `db708c218771a8d311356f0e96552c15df6e097a`, release 1.2.1.
+Source: https://github.com/opensandbox-group/OpenSandbox/tree/db708c218771a8d311356f0e96552c15df6e097a/manifests/charts
 
 Upstream chart source carries Apache-2.0 notices. No chart templates were modified.
 The installer supplies runtime overrides separately. `source-sha256.json` pins
@@ -14,10 +14,10 @@ gateway and server versions aligned. Optional fast-sandbox components are disabl
 
 | Package | SHA-256 |
 | --- | --- |
-| base-1.1.1.tgz | 724bf40381f31288356cf7299d4a366d5aee22394b461ae730752a8d0b56eabd |
-| opensandbox-controller-1.1.1.tgz | 6fe48f6d968615af076d612ba01a9ac5c09d9079cfd43210c876d6c47181e8a6 |
-| ingress-gateway-1.1.1.tgz | f6b44eb03fdee50a419eeaf926871022da7f1241cfb3ccee0aeda160bd8e05f3 |
-| opensandbox-server-1.1.1.tgz | b2009d9fbaa5c9fcbce58de216c8d8067bb2e4c15048765673a29c0cf1dbc33e |
+| base-1.2.1.tgz | 0460b2571788adae499f65f60c6b4b0eb0c31cddcc5dc178b76e758229554583 |
+| opensandbox-controller-1.2.1.tgz | a6faa7add1375f63520775d4b99f5db38d3c8c854e7b90326d5fcda6b5550535 |
+| ingress-gateway-1.2.1.tgz | 9259ab70c5a2c3d9323e659e67a288af130fc196ad50a869c21c9bb44826aa95 |
+| opensandbox-server-1.2.1.tgz | ba5995c3b37d97dcc59c85b671525efd74ed10deb747b53d6c348aff8bb55b38 |
 
 Release status: integration is under development. Packaging and Terraform
 validation do not establish customer readiness or Autopilot compatibility.

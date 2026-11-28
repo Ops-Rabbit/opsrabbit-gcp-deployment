@@ -40,7 +40,7 @@ locals {
   opensandbox_chart_images = {
     for component in ["controller", "server", "gateway"] : component => {
       repository = try(split("@", var.opensandbox_images[component])[0], "missing")
-      tag        = "release-1.1.1@${try(split("@", var.opensandbox_images[component])[1], "sha256:missing")}"
+      tag        = "release-1.2.1@${try(split("@", var.opensandbox_images[component])[1], "sha256:missing")}"
     }
   }
 }
@@ -161,6 +161,7 @@ resource "helm_release" "opensandbox_gateway" {
       dataplaneNamespace       = var.opensandbox_workload_namespace
       image                    = local.opensandbox_chart_images.gateway
       service                  = { type = "ClusterIP" }
+      wake                     = { enabled = false }
       secureAccess             = { existingSecret = var.opensandbox_signing_secret }
     }
   })]

@@ -1,6 +1,6 @@
 # Install OpenSandbox with OpsRabbit
 
-Every GKE installation includes the OpenSandbox 1.1.1 Kubernetes components and configures
+Every GKE installation includes the OpenSandbox 1.2.1 Kubernetes components and configures
 a fresh OpsRabbit database to use them. It is for a dedicated Standard or
 Autopilot cluster owned by this installer. It cannot be disabled through Terraform.
 Cloud Run does not install OpenSandbox and is unchanged by this requirement.
@@ -15,15 +15,16 @@ Cloud Run does not install OpenSandbox and is unchanged by this requirement.
 - Install Python 3.10+, kubectl, gcloud and the GKE auth plugin on the machine
   running Terraform. Its identity needs cluster administration for the upstream
   CRDs and RBAC and permission to read/create the selected Kubernetes Secrets.
-- Use the OpsRabbit Kubernetes server image built with `Dockerfile.kubernetes`
-  (version `1.1.1-opsrabbit-k8s.1`), not the unmodified upstream server or the
-  Docker runtime image. It supplies the `unprivileged` Kubernetes isolation profile.
+- Use the published OpsRabbit Kubernetes server image built with
+  `Dockerfile.kubernetes` (version `1.2.1-opsrabbit-k8s.1`). It supplies the
+  `unprivileged` Kubernetes isolation profile and confirmed workload retirement.
 - Mirror that server, the approved controller, ingress-gateway, execd and egress
-  release-1.1.1 images, and the compatible OpsRabbit sandbox image into your
+  release-1.2.1 images, and the compatible OpsRabbit sandbox image into your
   Artifact Registry. Supply their destination SHA-256 digests below. The nodes
   need reader access to every selected repository; the installer grants access
   to its own repository. A supplied custom Standard node identity must already
   have that access. No customer workload pulls from private AWS ECR.
+- Match the upstream components to the [1.2.1 release bill of materials](https://github.com/opensandbox-group/OpenSandbox/blob/release-1.2.1/docs/releases/1.2.1.yaml). Confirm the target GKE version and admission behavior before rollout. The upstream egress image still contains the h11 and Brotli packages flagged for CVE-2025-43859 and CVE-2026-111497.
 - Review the [upstream permissions](SKILLS-143-installer-security-decision.md).
   The controller and server have cluster-wide privileges. Namespaces do not
   restrict those privileges. Autopilot additionally enables `allow_net_admin`
@@ -106,6 +107,8 @@ omitted OpenSandbox will plan its components and the first-time product bootstra
 Review the added cluster privileges and resource costs before applying.
 
 ## Retry, upgrade and recovery
+
+For a move from 1.1.1, wait for the matching Kubernetes overlay image and qualify the new image set on Standard and Autopilot. Retire managed workspaces before changing the image inputs. Replace the controller, gateway, server, execd and egress references together with the approved 1.2.1 digests and review the Terraform plan. Retain the prior image set and installer revision for rollback. Preserve the database and Kubernetes Secrets.
 
 Reapply a failed plan after correcting its reported prerequisite. Keys are stable
 across retries. A failed or incomplete Secret is not replaced automatically.
